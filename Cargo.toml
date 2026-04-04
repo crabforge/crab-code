@@ -5,7 +5,7 @@ members = ["crates/*", "xtask"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.94"
 license = "Apache-2.0"
 repository = "https://github.com/CrabForge/crab-code"
 description = "Rust-native agentic coding CLI — open-source alternative to Claude Code"
@@ -31,8 +31,8 @@ eventsource-stream = "0.2"
 either = "1"
 
 # ─── TUI ───
-ratatui = "0.29"
-crossterm = "0.28"
+ratatui = "0.30"
+crossterm = "0.29"
 
 # ─── 错误处理 ───
 thiserror = "2"
@@ -45,38 +45,38 @@ tracing-appender = "0.2"
 
 # ─── 文件系统 ───
 globset = "0.4"
-similar = "2"
-notify = "7"
+similar = "3"
+notify = "8"
 ignore = "0.4"
 fd-lock = "4.0"
 dunce = "1"
 
 # ─── 代码渲染 ───
 syntect = "5"
-pulldown-cmark = "0.12"
+pulldown-cmark = "0.13"
 
 # ─── 系统 ───
-sysinfo = "0.32"
-directories = "5"
+sysinfo = "0.38"
+directories = "6"
 
 # ─── 认证 ───
 keyring = "3"
-oauth2 = "4"
+oauth2 = "5"
 
 # ─── 可观测性 ───
-opentelemetry = "0.27"
-opentelemetry-otlp = "0.27"
-opentelemetry_sdk = "0.27"
-tracing-opentelemetry = "0.28"
+opentelemetry = "0.31"
+opentelemetry-otlp = "0.31"
+opentelemetry_sdk = "0.31"
+tracing-opentelemetry = "0.32"
 
 # ─── WebSocket / MCP ───
-tokio-tungstenite = "0.24"
+tokio-tungstenite = "0.29"
 
 # ─── WASM 插件 ───
-wasmtime = "27"
+wasmtime = "43"
 
 # ─── 进程 ───
-portable-pty = "0.8"
+portable-pty = "0.9"
 
 # ─── 杂项 ───
 uuid = { version = "1", features = ["v4"] }
@@ -84,8 +84,8 @@ ulid = "1"
 lru = "0.12"
 unicode-width = "0.2"
 strip-ansi-escapes = "0.2"
-jsonc-parser = "0.23"
-schemars = "0.8"
+jsonc-parser = "0.32"
+schemars = "1"
 
 # ─── 内部 crate ───
 crab-common = { path = "crates/common" }

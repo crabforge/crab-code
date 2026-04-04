@@ -125,9 +125,9 @@
 | # | 功能 | TypeScript 原版 | Rust 替代 | 版本 | 文档 |
 |---|------|----------------|-----------|------|------|
 | 1 | CLI 框架 | Commander.js | clap (derive) | 4.x | [docs.rs/clap](https://docs.rs/clap) |
-| 2 | 终端 UI | React/Ink | ratatui + crossterm | 0.29 / 0.28 | [ratatui.rs](https://ratatui.rs) |
-| 3 | 终端样式 | chalk | crossterm Style | 0.28 | [docs.rs/crossterm](https://docs.rs/crossterm) |
-| 4 | Markdown 渲染 | marked | pulldown-cmark | 0.12 | [docs.rs/pulldown-cmark](https://docs.rs/pulldown-cmark) |
+| 2 | 终端 UI | React/Ink | ratatui + crossterm | 0.30 / 0.29 | [ratatui.rs](https://ratatui.rs) |
+| 3 | 终端样式 | chalk | crossterm Style | 0.29 | [docs.rs/crossterm](https://docs.rs/crossterm) |
+| 4 | Markdown 渲染 | marked | pulldown-cmark | 0.13 | [docs.rs/pulldown-cmark](https://docs.rs/pulldown-cmark) |
 | 5 | 语法高亮 | highlight.js | syntect | 5.x | [docs.rs/syntect](https://docs.rs/syntect) |
 | 6 | 模糊搜索 | Fuse.js | nucleo | 0.5 | [docs.rs/nucleo](https://docs.rs/nucleo) |
 
@@ -135,10 +135,10 @@
 
 | # | 功能 | TypeScript 原版 | Rust 替代 | 版本 | 文档 |
 |---|------|----------------|-----------|------|------|
-| 7 | HTTP 客户端 | axios/undici | reqwest | 0.12 | [docs.rs/reqwest](https://docs.rs/reqwest) |
-| 8 | WebSocket | ws | tokio-tungstenite | 0.24 | [docs.rs/tokio-tungstenite](https://docs.rs/tokio-tungstenite) |
+| 7 | HTTP 客户端 | axios/undici | reqwest | 0.13 | [docs.rs/reqwest](https://docs.rs/reqwest) |
+| 8 | WebSocket | ws | tokio-tungstenite | 0.29 | [docs.rs/tokio-tungstenite](https://docs.rs/tokio-tungstenite) |
 | 9 | 流式 SSE | Anthropic SDK | eventsource-stream | 0.2 | [docs.rs/eventsource-stream](https://docs.rs/eventsource-stream) |
-| 10 | OAuth | google-auth-library | oauth2 | 4.x | [docs.rs/oauth2](https://docs.rs/oauth2) |
+| 10 | OAuth | google-auth-library | oauth2 | 5.x | [docs.rs/oauth2](https://docs.rs/oauth2) |
 
 ### 3.3 序列化 / 校验
 
@@ -147,7 +147,7 @@
 | 11 | JSON | 内置 JSON | serde + serde_json | 1.x / 1.x | [serde.rs](https://serde.rs) |
 | 12 | YAML | yaml | serde_yml | 0.0.12 | [docs.rs/serde_yml](https://docs.rs/serde_yml) |
 | 13 | TOML | — | toml | 0.8 | [docs.rs/toml](https://docs.rs/toml) |
-| 14 | Schema 校验 | Zod | schemars | 0.8 | [docs.rs/schemars](https://docs.rs/schemars) |
+| 14 | Schema 校验 | Zod | schemars | 1.x | [docs.rs/schemars](https://docs.rs/schemars) |
 
 ### 3.4 文件系统 / 搜索
 
@@ -156,8 +156,8 @@
 | 15 | Glob | glob | globset | 0.4 | [docs.rs/globset](https://docs.rs/globset) |
 | 16 | Grep/搜索 | ripgrep 绑定 | grep crate 家族 | 0.3 | [docs.rs/grep](https://docs.rs/grep) |
 | 17 | Gitignore | — | ignore | 0.4 | [docs.rs/ignore](https://docs.rs/ignore) |
-| 18 | 文件监听 | chokidar | notify | 7.x | [docs.rs/notify](https://docs.rs/notify) |
-| 19 | Diff | diff | similar | 2.x | [docs.rs/similar](https://docs.rs/similar) |
+| 18 | 文件监听 | chokidar | notify | 8.x | [docs.rs/notify](https://docs.rs/notify) |
+| 19 | Diff | diff | similar | 3.x | [docs.rs/similar](https://docs.rs/similar) |
 | 20 | 文件锁 | proper-lockfile | fd-lock | 4.0 | [docs.rs/fd-lock](https://docs.rs/fd-lock) |
 
 ### 3.5 系统 / 进程
@@ -165,15 +165,15 @@
 | # | 功能 | TypeScript 原版 | Rust 替代 | 版本 | 文档 |
 |---|------|----------------|-----------|------|------|
 | 21 | 子进程 | execa | tokio::process | 1.x | [docs.rs/tokio](https://docs.rs/tokio) |
-| 22 | 进程树 | tree-kill | sysinfo | 0.32 | [docs.rs/sysinfo](https://docs.rs/sysinfo) |
-| 23 | 系统目录 | — | directories | 5.x | [docs.rs/directories](https://docs.rs/directories) |
+| 22 | 进程树 | tree-kill | sysinfo | 0.38 | [docs.rs/sysinfo](https://docs.rs/sysinfo) |
+| 23 | 系统目录 | — | directories | 6.x | [docs.rs/directories](https://docs.rs/directories) |
 | 24 | Keychain | 自实现 | keyring | 3.x | [docs.rs/keyring](https://docs.rs/keyring) |
 
 ### 3.6 可观测性 / 缓存
 
 | # | 功能 | TypeScript 原版 | Rust 替代 | 版本 | 文档 |
 |---|------|----------------|-----------|------|------|
-| 25 | OpenTelemetry | @opentelemetry/* | opentelemetry-rust | 0.27 | [docs.rs/opentelemetry](https://docs.rs/opentelemetry) |
+| 25 | OpenTelemetry | @opentelemetry/* | opentelemetry-rust | 0.31 | [docs.rs/opentelemetry](https://docs.rs/opentelemetry) |
 | 26 | 日志/追踪 | console.log | tracing | 0.1 | [docs.rs/tracing](https://docs.rs/tracing) |
 | 27 | LRU 缓存 | lru-cache | lru | 0.12 | [docs.rs/lru](https://docs.rs/lru) |
 | 28 | 错误处理 | Error class | thiserror + anyhow | 2.x / 1.x | [docs.rs/thiserror](https://docs.rs/thiserror) |
@@ -3441,11 +3441,11 @@ toml = "0.8"
 clap = { version = "4", features = ["derive"] }
 
 # ─── HTTP ───
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.13", features = ["json", "stream"] }
 
 # ─── TUI ───
-ratatui = "0.29"
-crossterm = "0.28"
+ratatui = "0.30"
+crossterm = "0.29"
 
 # ─── 错误处理 ───
 thiserror = "2"
@@ -3457,29 +3457,29 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # ─── 文件系统 ───
 globset = "0.4"
-similar = "2"
-notify = "7"
+similar = "3"
+notify = "8"
 ignore = "0.4"
 fd-lock = "4.0"
 dunce = "1"
 
 # ─── 代码渲染 ───
 syntect = "5"
-pulldown-cmark = "0.12"
+pulldown-cmark = "0.13"
 
 # ─── 系统 ───
-sysinfo = "0.32"
-directories = "5"
+sysinfo = "0.38"
+directories = "6"
 
 # ─── 认证 ───
 keyring = "3"
-oauth2 = "4"
+oauth2 = "5"
 
 # ─── 可观测性 ───
-opentelemetry = "0.27"
-opentelemetry-otlp = "0.27"
-opentelemetry-sdk = "0.27"
-tracing-opentelemetry = "0.28"
+opentelemetry = "0.31"
+opentelemetry-otlp = "0.31"
+opentelemetry-sdk = "0.31"
+tracing-opentelemetry = "0.32"
 
 # ─── 杂项 ───
 uuid = { version = "1", features = ["v4"] }
@@ -3487,8 +3487,8 @@ ulid = "1"
 lru = "0.12"
 unicode-width = "0.2"
 strip-ansi-escapes = "0.2"
-jsonc-parser = "0.23"
-schemars = "0.8"
+jsonc-parser = "0.32"
+schemars = "1"
 
 # ─── 内部 crate ───
 crab-common    = { path = "crates/common" }

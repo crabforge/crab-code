@@ -156,10 +156,10 @@ pub fn from_chat_completion_response(resp: ChatCompletionResponse) -> Result<Mes
 fn chat_message_to_content_blocks(msg: &ChatMessage) -> Vec<ContentBlock> {
     let mut blocks = Vec::new();
 
-    if let Some(text) = &msg.content {
-        if !text.is_empty() {
-            blocks.push(ContentBlock::Text { text: text.clone() });
-        }
+    if let Some(text) = &msg.content
+        && !text.is_empty()
+    {
+        blocks.push(ContentBlock::Text { text: text.clone() });
     }
 
     if let Some(tool_calls) = &msg.tool_calls {
@@ -192,26 +192,25 @@ pub fn chunk_to_stream_event(chunk: &ChatCompletionChunk) -> Vec<StreamEvent> {
     let mut events = Vec::new();
 
     for choice in &chunk.choices {
-        if let Some(content) = &choice.delta.content {
-            if !content.is_empty() {
-                events.push(StreamEvent::ContentDelta {
-                    index: choice.index,
-                    delta: content.clone(),
-                });
-            }
+        if let Some(content) = &choice.delta.content
+            && !content.is_empty()
+        {
+            events.push(StreamEvent::ContentDelta {
+                index: choice.index,
+                delta: content.clone(),
+            });
         }
 
         if let Some(tool_calls) = &choice.delta.tool_calls {
             for tc in tool_calls {
-                if let Some(func) = &tc.function {
-                    if let Some(args) = &func.arguments {
-                        if !args.is_empty() {
-                            events.push(StreamEvent::ContentDelta {
-                                index: tc.index,
-                                delta: args.clone(),
-                            });
-                        }
-                    }
+                if let Some(func) = &tc.function
+                    && let Some(args) = &func.arguments
+                    && !args.is_empty()
+                {
+                    events.push(StreamEvent::ContentDelta {
+                        index: tc.index,
+                        delta: args.clone(),
+                    });
                 }
             }
         }
