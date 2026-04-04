@@ -23,6 +23,8 @@ schemars.workspace = true
 
 [dev-dependencies]
 tokio-util.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]
 workspace = true

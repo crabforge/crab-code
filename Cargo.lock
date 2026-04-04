@@ -592,6 +592,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-tungstenite",
+ "tracing",
 ]
 
 [[package]]
@@ -621,7 +622,9 @@ dependencies = [
  "crab-common",
  "crab-config",
  "crab-core",
+ "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 
@@ -653,6 +656,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",

@@ -8,8 +8,9 @@ pub mod transport;
 pub use client::McpClient;
 pub use discovery::{McpServerConfig, McpTransportConfig};
 pub use protocol::{
-    JsonRpcError, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, McpPrompt, McpResource,
-    McpToolDef, ServerCapabilities,
+    ClientCapabilities, ClientInfo, InitializeParams, InitializeResult, JsonRpcError,
+    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, McpPrompt, McpResource, McpToolDef,
+    ServerCapabilities, ServerInfo, ToolCallParams, ToolCallResult,
 };
 pub use resource::ResourceCache;
 pub use server::McpServer;

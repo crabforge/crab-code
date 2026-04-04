@@ -1,6 +1,18 @@
 use std::path::PathBuf;
 
+use crab_core::message::Message;
+use serde::{Deserialize, Serialize};
+
+/// On-disk session transcript format.
+#[derive(Debug, Serialize, Deserialize)]
+struct SessionFile {
+    session_id: String,
+    messages: Vec<Message>,
+}
+
 /// Persists and recovers session transcripts from disk.
+///
+/// Each session is stored as `{base_dir}/{session_id}.json`.
 pub struct SessionHistory {
     pub base_dir: PathBuf,
 }
@@ -10,22 +22,141 @@ impl SessionHistory {
         Self { base_dir }
     }
 
+    /// Ensure the base directory exists.
+    fn ensure_dir(&self) -> crab_common::Result<()> {
+        std::fs::create_dir_all(&self.base_dir)?;
+        Ok(())
+    }
+
+    /// Path to a session file.
+    fn session_path(&self, session_id: &str) -> PathBuf {
+        self.base_dir.join(format!("{session_id}.json"))
+    }
+
+    /// Save a session transcript to disk.
     pub fn save(
         &self,
-        _session_id: &str,
-        _messages: &[crab_core::message::Message],
+        session_id: &str,
+        messages: &[Message],
     ) -> crab_common::Result<()> {
-        todo!()
+        self.ensure_dir()?;
+        let file = SessionFile {
+            session_id: session_id.to_string(),
+            messages: messages.to_vec(),
+        };
+        let json = serde_json::to_string_pretty(&file)
+            .map_err(|e| crab_common::Error::Other(format!("serialize session: {e}")))?;
+        std::fs::write(self.session_path(session_id), json)?;
+        Ok(())
     }
 
+    /// Load a session transcript from disk. Returns `None` if the file doesn't exist.
     pub fn load(
         &self,
-        _session_id: &str,
-    ) -> crab_common::Result<Option<Vec<crab_core::message::Message>>> {
-        todo!()
+        session_id: &str,
+    ) -> crab_common::Result<Option<Vec<Message>>> {
+        let path = self.session_path(session_id);
+        if !path.exists() {
+            return Ok(None);
+        }
+        let data = std::fs::read_to_string(&path)?;
+        let file: SessionFile = serde_json::from_str(&data)
+            .map_err(|e| crab_common::Error::Other(format!("parse session: {e}")))?;
+        Ok(Some(file.messages))
     }
 
+    /// List all saved session IDs (sorted by name).
     pub fn list_sessions(&self) -> crab_common::Result<Vec<String>> {
-        todo!()
+        if !self.base_dir.exists() {
+            return Ok(Vec::new());
+        }
+        let mut sessions = Vec::new();
+        for entry in std::fs::read_dir(&self.base_dir)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if let Some(id) = name.strip_suffix(".json") {
+                sessions.push(id.to_string());
+            }
+        }
+        sessions.sort();
+        Ok(sessions)
+    }
+
+    /// Delete a session file.
+    pub fn delete(&self, session_id: &str) -> crab_common::Result<()> {
+        let path = self.session_path(session_id);
+        if path.exists() {
+            std::fs::remove_file(&path)?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crab_core::message::Message;
+
+    #[test]
+    fn save_and_load_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let history = SessionHistory::new(dir.path().to_path_buf());
+
+        let messages = vec![
+            Message::user("Hello"),
+            Message::assistant("Hi there!"),
+        ];
+        history.save("test-session", &messages).unwrap();
+
+        let loaded = history.load("test-session").unwrap().unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].text(), "Hello");
+        assert_eq!(loaded[1].text(), "Hi there!");
+    }
+
+    #[test]
+    fn load_nonexistent_returns_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let history = SessionHistory::new(dir.path().to_path_buf());
+        assert!(history.load("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn list_sessions_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let history = SessionHistory::new(dir.path().join("sessions"));
+        assert!(history.list_sessions().unwrap().is_empty());
+    }
+
+    #[test]
+    fn list_sessions_returns_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        let history = SessionHistory::new(dir.path().to_path_buf());
+
+        history.save("session-b", &[Message::user("b")]).unwrap();
+        history.save("session-a", &[Message::user("a")]).unwrap();
+
+        let sessions = history.list_sessions().unwrap();
+        assert_eq!(sessions, vec!["session-a", "session-b"]);
+    }
+
+    #[test]
+    fn delete_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let history = SessionHistory::new(dir.path().to_path_buf());
+
+        history.save("to-delete", &[Message::user("x")]).unwrap();
+        assert!(history.load("to-delete").unwrap().is_some());
+
+        history.delete("to-delete").unwrap();
+        assert!(history.load("to-delete").unwrap().is_none());
+    }
+
+    #[test]
+    fn delete_nonexistent_is_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let history = SessionHistory::new(dir.path().to_path_buf());
+        history.delete("nope").unwrap(); // should not error
     }
 }
