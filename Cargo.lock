@@ -454,6 +454,7 @@ version = "0.1.0"
 dependencies = [
  "crab-api",
  "crab-common",
+ "crab-config",
  "crab-core",
  "crab-session",
  "crab-tools",
@@ -588,6 +589,9 @@ version = "0.1.0"
 dependencies = [
  "crab-common",
  "crab-core",
+ "eventsource-stream",
+ "futures",
+ "reqwest 0.13.2",
  "serde",
  "serde_json",
  "tokio",
@@ -666,13 +670,21 @@ dependencies = [
 name = "crab-tui"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "crab-agent",
+ "crab-api",
  "crab-common",
  "crab-config",
  "crab-core",
+ "crab-session",
+ "crab-tools",
  "crossterm",
+ "futures",
  "pulldown-cmark",
  "ratatui",
  "syntect",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -870,6 +882,7 @@ dependencies = [
  "crossterm_winapi",
  "derive_more",
  "document-features",
+ "futures-core",
  "mio",
  "parking_lot",
  "rustix",

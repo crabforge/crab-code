@@ -754,7 +754,7 @@ pub enum ToolSource {
     /// 内置工具（Bash/Read/Write/Edit/Glob/Grep 等）
     BuiltIn,
     /// 外部 MCP server 提供的工具（不可信来源，Default/TrustProject 需 Prompt）
-    McpExternal,
+    McpExternal { server_name: String },
     /// 子 Agent 创建（AgentTool，TrustProject 信任自动放行）
     AgentSpawn,
 }
@@ -815,26 +815,41 @@ pub struct ToolContext {
     pub permission_policy: crate::permission::PermissionPolicy,
 }
 
+/// 工具输出内容块 — 支持文本、图片、结构化 JSON
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolOutputContent {
+    Text { text: String },
+    Image { media_type: String, data: String },
+    Json { value: Value },
+}
+
 /// 工具执行结果
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolOutput {
-    pub content: String,
+    pub content: Vec<ToolOutputContent>,
     pub is_error: bool,
 }
 
 impl ToolOutput {
-    pub fn success(content: impl Into<String>) -> Self {
+    pub fn success(text: impl Into<String>) -> Self {
         Self {
-            content: content.into(),
+            content: vec![ToolOutputContent::Text { text: text.into() }],
             is_error: false,
         }
     }
 
-    pub fn error(content: impl Into<String>) -> Self {
+    pub fn error(text: impl Into<String>) -> Self {
         Self {
-            content: content.into(),
+            content: vec![ToolOutputContent::Text { text: text.into() }],
             is_error: true,
         }
+    }
+
+    pub fn text(&self) -> String {
+        self.content.iter()
+            .filter_map(|c| match c { ToolOutputContent::Text { text } => Some(text.as_str()), _ => None })
+            .collect::<Vec<_>>().join("")
     }
 }
 ```
@@ -1902,7 +1917,7 @@ impl ToolExecutor {
         } else {
             match tool.source() {
                 // MCP 外部工具：Default/TrustProject 都需 Prompt（不可信来源）
-                ToolSource::McpExternal => true,
+                ToolSource::McpExternal { .. } => true,
                 // 子 Agent 创建：TrustProject 信任放行，Default 需 Prompt
                 ToolSource::AgentSpawn => {
                     ctx.permission_mode == PermissionMode::Default
@@ -2421,10 +2436,10 @@ pub async fn query_loop(
                 let (id, output) = result?;
                 let output = output?;
                 event_tx.send(Event::ToolResult {
-                    id: id.clone(), content: output.content.clone(), is_error: output.is_error,
+                    id: id.clone(), content: output.text(), is_error: output.is_error,
                 }).await.ok();
                 tool_results.push(ContentBlock::ToolResult {
-                    tool_use_id: id, content: output.content, is_error: output.is_error,
+                    tool_use_id: id, content: output.text(), is_error: output.is_error,
                 });
             }
         }
@@ -2436,10 +2451,10 @@ pub async fn query_loop(
             }).await.ok();
             let output = tools.execute(name, (*input).clone(), &ctx).await?;
             event_tx.send(Event::ToolResult {
-                id: (*id).clone(), content: output.content.clone(), is_error: output.is_error,
+                id: (*id).clone(), content: output.text(), is_error: output.is_error,
             }).await.ok();
             tool_results.push(ContentBlock::ToolResult {
-                tool_use_id: (*id).clone(), content: output.content, is_error: output.is_error,
+                tool_use_id: (*id).clone(), content: output.text(), is_error: output.is_error,
             });
         }
 

@@ -83,6 +83,7 @@ impl AgentSession {
             max_tokens: session_config.max_tokens,
             temperature: session_config.temperature,
             tool_schemas,
+            cache_enabled: false,
         };
 
         let (event_tx, event_rx) = mpsc::channel(256);

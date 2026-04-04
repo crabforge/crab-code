@@ -17,6 +17,14 @@ pub struct McpClient {
     tools: Vec<McpToolDef>,
 }
 
+impl std::fmt::Debug for McpClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("McpClient")
+            .field("server_name", &self.server_name)
+            .finish_non_exhaustive()
+    }
+}
+
 impl McpClient {
     /// Connect to an MCP server: perform the initialize handshake and discover tools.
     ///

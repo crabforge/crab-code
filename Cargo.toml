@@ -32,7 +32,7 @@ either = "1"
 
 # ─── TUI ───
 ratatui = "0.30"
-crossterm = "0.29"
+crossterm = { version = "0.29", features = ["event-stream"] }
 
 # ─── 错误处理 ───
 thiserror = "2"

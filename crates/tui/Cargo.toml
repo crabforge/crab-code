@@ -11,10 +11,18 @@ description = "Terminal UI for Crab Code"
 crab-common.workspace = true
 crab-core.workspace = true
 crab-config.workspace = true
+crab-agent.workspace = true
+crab-api.workspace = true
+crab-tools.workspace = true
+crab-session.workspace = true
 ratatui.workspace = true
 crossterm.workspace = true
 syntect.workspace = true
 pulldown-cmark.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+anyhow.workspace = true
 
 [lints]
 workspace = true

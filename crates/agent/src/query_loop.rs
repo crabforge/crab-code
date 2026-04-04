@@ -1,26 +1,30 @@
 use std::borrow::Cow;
 
-use crab_api::types::MessageRequest;
+use crab_api::types::{CacheBreakpoint, MessageRequest, StreamEvent};
 use crab_api::LlmBackend;
 use crab_core::event::Event;
 use crab_core::message::{ContentBlock, Message, Role};
-use crab_core::model::ModelId;
+use crab_core::model::{ModelId, TokenUsage};
 use crab_core::tool::{ToolContext, ToolOutput};
-use crab_session::Conversation;
+use crab_session::{CompactionStrategy, ContextAction, ContextManager, Conversation};
 use crab_tools::executor::ToolExecutor;
+use futures::StreamExt;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 /// Configuration for the query loop.
+#[derive(Clone)]
 pub struct QueryLoopConfig {
     pub model: ModelId,
     pub max_tokens: u32,
     pub temperature: Option<f32>,
     /// Tool JSON schemas to send with each API request.
     pub tool_schemas: Vec<serde_json::Value>,
+    /// Whether to enable prompt caching (Anthropic only).
+    pub cache_enabled: bool,
 }
 
-/// Core agent loop: user input -> LLM API call -> parse tool calls ->
+/// Core agent loop: user input -> LLM SSE stream -> parse tool calls ->
 /// execute tools -> serialize results -> next round.
 /// Exits when the model produces a final message without tool calls.
 pub async fn query_loop(
@@ -33,17 +37,28 @@ pub async fn query_loop(
     cancel: CancellationToken,
 ) -> crab_common::Result<()> {
     let mut turn_index: usize = 0;
+    let context_mgr = ContextManager::default();
 
     loop {
         if cancel.is_cancelled() {
             return Ok(());
         }
 
+        // Check context usage and compact if needed
+        check_and_compact(conversation, &context_mgr, &event_tx).await;
+
         // Emit turn start
         let _ = event_tx
             .send(Event::TurnStart { turn_index })
             .await;
         turn_index += 1;
+
+        // Build cache breakpoints
+        let cache_breakpoints = if config.cache_enabled {
+            vec![CacheBreakpoint::System, CacheBreakpoint::Tools]
+        } else {
+            vec![]
+        };
 
         // Build the API request from conversation state
         let req = MessageRequest {
@@ -53,41 +68,26 @@ pub async fn query_loop(
             max_tokens: config.max_tokens,
             tools: config.tool_schemas.clone(),
             temperature: config.temperature,
-            cache_breakpoints: vec![],
+            cache_breakpoints,
         };
 
-        // Call the LLM (non-streaming for now; streaming upgrade is a follow-up)
-        let response = backend.send_message(req).await.map_err(|e| {
-            crab_common::Error::Other(format!("LLM API error: {e}"))
-        })?;
+        // Stream the LLM response via SSE
+        let (assistant_msg, total_usage, _stop_reason) =
+            stream_response(backend, req, &event_tx, &cancel).await?;
 
         // Record usage
-        conversation.record_usage(response.usage.clone());
+        conversation.record_usage(total_usage.clone());
         let _ = event_tx
             .send(Event::MessageEnd {
-                usage: response.usage,
+                usage: total_usage,
             })
             .await;
 
         // Add assistant message to conversation
-        let assistant_msg = response.message;
         let has_tool_use = assistant_msg.has_tool_use();
-
-        // Emit text content deltas for the TUI
-        for (i, block) in assistant_msg.content.iter().enumerate() {
-            if let ContentBlock::Text { text } = block {
-                let _ = event_tx
-                    .send(Event::ContentDelta {
-                        index: i,
-                        delta: text.clone(),
-                    })
-                    .await;
-            }
-        }
-
         conversation.push(assistant_msg.clone());
 
-        // If no tool use, we're done — model produced a final answer
+        // If no tool use, we're done
         if !has_tool_use {
             return Ok(());
         }
@@ -105,6 +105,185 @@ pub async fn query_loop(
         // Build tool result message and add to conversation
         let result_msg = tool_results_message(tool_results);
         conversation.push(result_msg);
+    }
+}
+
+/// Stream an LLM response, assembling the assistant message from SSE events.
+///
+/// Returns the assembled message, total usage, and stop reason.
+async fn stream_response(
+    backend: &LlmBackend,
+    req: MessageRequest<'_>,
+    event_tx: &mpsc::Sender<Event>,
+    cancel: &CancellationToken,
+) -> crab_common::Result<(Message, TokenUsage, Option<String>)> {
+    let mut stream = std::pin::pin!(backend.stream_message(req));
+
+    // Accumulators for building the assistant message
+    let mut content_blocks: Vec<ContentBlockAccum> = Vec::new();
+    let mut total_usage = TokenUsage::default();
+    let mut stop_reason: Option<String> = None;
+
+    while let Some(event) = stream.next().await {
+        if cancel.is_cancelled() {
+            break;
+        }
+
+        let event = event.map_err(|e| {
+            crab_common::Error::Other(format!("SSE stream error: {e}"))
+        })?;
+
+        match event {
+            StreamEvent::MessageStart { id, usage } => {
+                total_usage += usage;
+                let _ = event_tx.send(Event::MessageStart { id }).await;
+            }
+            StreamEvent::ContentBlockStart { index, content_type } => {
+                // Ensure we have enough slots
+                while content_blocks.len() <= index {
+                    content_blocks.push(ContentBlockAccum::new("text"));
+                }
+                content_blocks[index] = ContentBlockAccum::new(&content_type);
+            }
+            StreamEvent::ContentDelta { index, delta } => {
+                if let Some(block) = content_blocks.get_mut(index) {
+                    block.text.push_str(&delta);
+                }
+                let _ = event_tx
+                    .send(Event::ContentDelta { index, delta })
+                    .await;
+            }
+            StreamEvent::ContentBlockStop { index } => {
+                let _ = event_tx
+                    .send(Event::ContentBlockStop { index })
+                    .await;
+            }
+            StreamEvent::MessageDelta {
+                usage,
+                stop_reason: reason,
+            } => {
+                total_usage += usage;
+                if reason.is_some() {
+                    stop_reason = reason;
+                }
+            }
+            StreamEvent::MessageStop => {
+                // Stream complete
+            }
+            StreamEvent::Error { message } => {
+                let _ = event_tx
+                    .send(Event::Error {
+                        message: message.clone(),
+                    })
+                    .await;
+                return Err(crab_common::Error::Other(format!(
+                    "SSE stream error: {message}"
+                )));
+            }
+        }
+    }
+
+    // Assemble content blocks into a Message
+    let content: Vec<ContentBlock> = content_blocks
+        .into_iter()
+        .map(ContentBlockAccum::into_content_block)
+        .collect();
+
+    let message = Message::new(Role::Assistant, content);
+    Ok((message, total_usage, stop_reason))
+}
+
+/// Accumulator for building a content block from streaming deltas.
+struct ContentBlockAccum {
+    block_type: String,
+    text: String,
+}
+
+impl ContentBlockAccum {
+    fn new(block_type: &str) -> Self {
+        Self {
+            block_type: block_type.to_string(),
+            text: String::new(),
+        }
+    }
+
+    fn into_content_block(self) -> ContentBlock {
+        match self.block_type.as_str() {
+            "tool_use" => {
+                // Tool use blocks accumulate JSON in `text` field.
+                // The content_block_start should have provided id/name,
+                // but in the SSE protocol those come as separate fields.
+                // For now, parse the accumulated JSON as a tool_use block.
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&self.text) {
+                    let id = val.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let name = val.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let input = val.get("input").cloned().unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
+                    ContentBlock::ToolUse { id, name, input }
+                } else {
+                    // Fallback: treat as text
+                    ContentBlock::Text { text: self.text }
+                }
+            }
+            _ => ContentBlock::Text { text: self.text },
+        }
+    }
+}
+
+/// Check context usage and compact if needed.
+#[allow(clippy::cast_precision_loss)]
+async fn check_and_compact(
+    conversation: &mut Conversation,
+    context_mgr: &ContextManager,
+    event_tx: &mpsc::Sender<Event>,
+) {
+    match context_mgr.check(conversation) {
+        ContextAction::NeedsCompaction {
+            used,
+            limit,
+            percent,
+        } => {
+            if let Some(strategy) = CompactionStrategy::for_usage(percent) {
+                let before_tokens = conversation.estimated_tokens();
+                let strategy_name = format!("{strategy:?}");
+                let _ = event_tx
+                    .send(Event::CompactStart {
+                        strategy: strategy_name,
+                        before_tokens,
+                    })
+                    .await;
+
+                // Use truncation directly (LLM-based compaction needs CompactionClient)
+                let budget = limit * 60 / 100;
+                let removed = conversation.inner.truncate_to_budget(budget);
+
+                let _ = event_tx
+                    .send(Event::CompactEnd {
+                        after_tokens: conversation.estimated_tokens(),
+                        removed_messages: removed,
+                    })
+                    .await;
+            } else {
+                let _ = event_tx
+                    .send(Event::TokenWarning {
+                        usage_pct: used as f32 / limit as f32,
+                        used,
+                        limit,
+                    })
+                    .await;
+            }
+        }
+        ContextAction::Warning {
+            used, limit, ..
+        } => {
+            let _ = event_tx
+                .send(Event::TokenWarning {
+                    usage_pct: used as f32 / limit as f32,
+                    used,
+                    limit,
+                })
+                .await;
+        }
+        ContextAction::Ok => {}
     }
 }
 
@@ -382,6 +561,7 @@ mod tests {
             max_tokens: 4096,
             temperature: Some(0.7),
             tool_schemas: vec![],
+            cache_enabled: false,
         };
         assert_eq!(config.model.as_str(), "claude-sonnet-4-20250514");
         assert_eq!(config.max_tokens, 4096);

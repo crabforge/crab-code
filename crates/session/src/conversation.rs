@@ -15,6 +15,12 @@ pub struct Conversation {
     pub context_window: u64,
 }
 
+impl Default for Conversation {
+    fn default() -> Self {
+        Self::new(String::new(), String::new(), 0)
+    }
+}
+
 impl Conversation {
     pub fn new(id: String, system_prompt: String, context_window: u64) -> Self {
         Self {

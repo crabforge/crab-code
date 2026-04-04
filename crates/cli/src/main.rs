@@ -1,21 +1,24 @@
 mod commands;
 mod setup;
 
-use std::borrow::Cow;
-use std::io::Write;
+use std::io::{BufRead, Write};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::Parser;
-use futures::stream::StreamExt;
 
-use crab_api::types::{MessageRequest, StreamEvent};
-use crab_core::message::Message;
+use crab_agent::{AgentSession, SessionConfig, build_system_prompt};
+use crab_core::event::Event;
 use crab_core::model::ModelId;
+use crab_core::permission::PermissionPolicy;
+use crab_tools::builtin::create_default_registry;
+use tokio::sync::mpsc;
 
 /// Crab Code -- Rust-native Agentic Coding CLI
 #[derive(Parser)]
 #[command(name = "crab", version, about)]
 struct Cli {
-    /// User prompt (if provided, runs in non-interactive demo mode)
+    /// User prompt (if provided, runs single-shot mode then exits)
     prompt: Option<String>,
 
     /// LLM provider: "anthropic" (default) or "openai"
@@ -33,115 +36,200 @@ struct Cli {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-
-    if let Some(prompt) = cli.prompt {
-        // Demo mode: single-shot streaming query
-        let rt = tokio::runtime::Runtime::new()?;
-        rt.block_on(run_demo(cli.provider, cli.model, cli.max_tokens, prompt))
-    } else {
-        // Interactive mode placeholder
-        println!("crab-code v{}", env!("CARGO_PKG_VERSION"));
-        println!("Interactive mode not yet implemented. Pass a prompt as argument:");
-        println!("  cargo run -p crab-cli -- \"hello\"");
-        Ok(())
-    }
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(run(cli))
 }
 
-async fn run_demo(
-    provider: String,
-    model_override: Option<String>,
-    max_tokens: u32,
-    prompt: String,
-) -> anyhow::Result<()> {
-    // Build settings from the CLI args
-    let mut settings = crab_config::Settings {
-        api_provider: Some(provider.clone()),
+async fn run(cli: Cli) -> anyhow::Result<()> {
+    let settings = crab_config::Settings {
+        api_provider: Some(cli.provider.clone()),
+        model: cli.model.clone(),
         ..Default::default()
     };
-    if let Some(ref m) = model_override {
-        settings.model = Some(m.clone());
-    }
 
-    // Resolve model ID
-    let model_id = model_override.unwrap_or_else(|| {
-        if provider == "openai" {
+    let model_id = cli.model.unwrap_or_else(|| {
+        if cli.provider == "openai" {
             "gpt-4o".to_string()
         } else {
             "claude-sonnet-4-20250514".to_string()
         }
     });
 
-    eprintln!("[crab] provider={provider}, model={model_id}, max_tokens={max_tokens}");
+    let backend = Arc::new(crab_api::create_backend(&settings));
+    let registry = create_default_registry();
 
-    // Create backend
-    let backend = crab_api::create_backend(&settings);
-    eprintln!("[crab] backend={}", backend.name());
-
-    // Build request
-    let messages = vec![Message::user(&prompt)];
-    let req = MessageRequest {
-        model: ModelId::from(model_id.as_str()),
-        messages: Cow::Borrowed(&messages),
-        system: None,
-        max_tokens,
-        tools: vec![],
-        temperature: None,
-        cache_breakpoints: vec![],
-    };
-
-    // Stream response
-    let mut stream = std::pin::pin!(backend.stream_message(req));
-    let mut stdout = std::io::stdout();
-    let mut total_input = 0u64;
-    let mut total_output = 0u64;
-
-    while let Some(event) = stream.next().await {
-        match event {
-            Ok(ev) => match ev {
-                StreamEvent::MessageStart { id, usage } => {
-                    eprintln!("[crab] message_start id={id}");
-                    total_input += usage.input_tokens;
-                    total_output += usage.output_tokens;
-                }
-                StreamEvent::ContentDelta { delta, .. } => {
-                    print!("{delta}");
-                    stdout.flush()?;
-                }
-                StreamEvent::MessageDelta {
-                    usage, stop_reason, ..
-                } => {
-                    total_output += usage.output_tokens;
-                    if let Some(reason) = stop_reason {
-                        eprintln!("\n[crab] stop_reason={reason}");
-                    }
-                }
-                StreamEvent::MessageStop => {
-                    // end
-                }
-                StreamEvent::ContentBlockStart { index, content_type } => {
-                    eprintln!("[crab] content_block_start index={index} type={content_type}");
-                }
-                StreamEvent::ContentBlockStop { index } => {
-                    eprintln!("[crab] content_block_stop index={index}");
-                }
-                StreamEvent::Error { message } => {
-                    eprintln!("\n[crab] stream error: {message}");
-                }
-            },
-            Err(e) => {
-                eprintln!("\n[crab] error: {e}");
-                return Err(e.into());
-            }
-        }
-    }
-
-    println!();
-    eprintln!(
-        "[crab] tokens: input={}, output={}, total={}",
-        total_input,
-        total_output,
-        total_input + total_output,
+    let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let system_prompt = build_system_prompt(
+        &working_dir,
+        &registry,
+        settings.system_prompt.as_deref(),
     );
 
+    let session_config = SessionConfig {
+        session_id: crab_common::id::new_ulid(),
+        system_prompt,
+        model: ModelId::from(model_id.as_str()),
+        max_tokens: cli.max_tokens,
+        temperature: None,
+        context_window: 200_000,
+        working_dir,
+        permission_policy: PermissionPolicy::default(),
+    };
+
+    eprintln!(
+        "crab-code v{} (provider={}, model={model_id})",
+        env!("CARGO_PKG_VERSION"),
+        cli.provider,
+    );
+
+    if let Some(prompt) = cli.prompt {
+        // Single-shot mode: create an AgentSession and run once
+        let mut session = AgentSession::new(session_config, backend, registry);
+        run_single_shot(&mut session, &prompt).await
+    } else {
+        // Interactive mode: TUI if available, else line-based REPL
+        #[cfg(feature = "tui")]
+        {
+            let tui_config = crab_tui::TuiConfig {
+                session_config,
+                backend,
+            };
+            crab_tui::run(tui_config).await
+        }
+        #[cfg(not(feature = "tui"))]
+        {
+            let mut session = AgentSession::new(session_config, backend, registry);
+            eprintln!("Type /exit or Ctrl+D to quit.\n");
+            run_repl(&mut session).await
+        }
+    }
+}
+
+/// Run a single prompt, print the result, and exit.
+async fn run_single_shot(session: &mut AgentSession, prompt: &str) -> anyhow::Result<()> {
+    let event_rx = take_event_rx(session);
+    let printer = tokio::spawn(print_events(event_rx));
+
+    let result = session.handle_user_input(prompt).await;
+    // Drop the event_tx side so printer finishes
+    drop(session.event_tx.clone());
+    let _ = printer.await;
+
+    result.map_err(Into::into)
+}
+
+/// Interactive REPL: read lines, send to agent, print streaming output.
+#[cfg(not(feature = "tui"))]
+async fn run_repl(session: &mut AgentSession) -> anyhow::Result<()> {
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+
+    loop {
+        // Print prompt
+        print!("crab> ");
+        stdout.flush()?;
+
+        // Read a line
+        let mut line = String::new();
+        let bytes_read = stdin.lock().read_line(&mut line)?;
+
+        // Ctrl+D (EOF)
+        if bytes_read == 0 {
+            eprintln!("\nGoodbye!");
+            break;
+        }
+
+        let input = line.trim();
+
+        if input.is_empty() {
+            continue;
+        }
+
+        if input == "/exit" || input == "/quit" {
+            eprintln!("Goodbye!");
+            break;
+        }
+
+        let event_rx = take_event_rx(session);
+        let printer = tokio::spawn(print_events(event_rx));
+
+        match session.handle_user_input(input).await {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("\n[error] {e}");
+            }
+        }
+
+        let _ = printer.await;
+        println!();
+    }
+
     Ok(())
+}
+
+/// Swap the session's `event_rx` with a fresh one, returning the old receiver.
+fn take_event_rx(session: &mut AgentSession) -> mpsc::Receiver<Event> {
+    let (new_tx, new_rx) = mpsc::channel(256);
+    let old_rx = std::mem::replace(&mut session.event_rx, new_rx);
+    session.event_tx = new_tx;
+    old_rx
+}
+
+/// Drain events from the receiver and print them to stdout/stderr.
+async fn print_events(mut rx: mpsc::Receiver<Event>) {
+    let mut stdout = std::io::stdout();
+    while let Some(event) = rx.recv().await {
+        match event {
+            Event::ContentDelta { delta, .. } => {
+                print!("{delta}");
+                let _ = stdout.flush();
+            }
+            Event::ToolUseStart { name, .. } => {
+                eprintln!("\n[tool] {name}");
+            }
+            Event::ToolResult { id: _, output } => {
+                if output.is_error {
+                    eprintln!("[tool error] {}", output.text());
+                } else {
+                    let text = output.text();
+                    if text.len() > 500 {
+                        eprintln!("[tool result] {}...", &text[..500]);
+                    } else {
+                        eprintln!("[tool result] {text}");
+                    }
+                }
+            }
+            Event::Error { message } => {
+                eprintln!("[error] {message}");
+            }
+            Event::TokenWarning {
+                usage_pct,
+                used,
+                limit,
+            } => {
+                eprintln!(
+                    "[warn] Token usage {:.0}% ({used}/{limit})",
+                    usage_pct * 100.0,
+                );
+            }
+            Event::CompactStart { strategy, .. } => {
+                eprintln!("[compact] Starting compaction: {strategy}");
+            }
+            Event::CompactEnd {
+                after_tokens,
+                removed_messages,
+            } => {
+                eprintln!(
+                    "[compact] Compacted: removed {removed_messages} messages, now {after_tokens} tokens"
+                );
+            }
+            Event::TurnStart { .. }
+            | Event::MessageStart { .. }
+            | Event::ContentBlockStop { .. }
+            | Event::MessageEnd { .. }
+            | Event::ToolUseInput { .. }
+            | Event::PermissionRequest { .. }
+            | Event::PermissionResponse { .. } => {}
+        }
+    }
 }

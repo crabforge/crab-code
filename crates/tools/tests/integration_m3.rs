@@ -180,11 +180,11 @@ async fn read_binary_extension_returns_info() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 3. WriteTool integration (currently stubbed — verify error path)
+// 3. WriteTool integration
 // ═══════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn write_tool_returns_not_implemented() {
+async fn write_tool_creates_file() {
     let executor = make_executor();
     let tmp = tempfile::tempdir().unwrap();
     let ctx = make_ctx(tmp.path(), PermissionMode::Dangerously);
@@ -195,29 +195,27 @@ async fn write_tool_returns_not_implemented() {
         "content": "hello world"
     });
     let output = executor.execute("write", input, &ctx).await.unwrap();
-    // WriteTool is stubbed with "not implemented"
-    assert!(output.is_error);
-    assert!(output.text().contains("not implemented"));
+    assert!(!output.is_error, "write should succeed: {}", output.text());
+    assert!(file.exists());
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 4. EditTool integration (currently stubbed — verify error path)
+// 4. EditTool integration
 // ═══════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn edit_tool_returns_not_implemented() {
+async fn edit_tool_returns_error_for_nonexistent_file() {
     let executor = make_executor();
     let tmp = tempfile::tempdir().unwrap();
     let ctx = make_ctx(tmp.path(), PermissionMode::Dangerously);
 
     let input = serde_json::json!({
-        "file_path": "/some/file.rs",
+        "file_path": tmp.path().join("nonexistent.rs").to_str().unwrap(),
         "old_string": "foo",
         "new_string": "bar"
     });
     let output = executor.execute("edit", input, &ctx).await.unwrap();
     assert!(output.is_error);
-    assert!(output.text().contains("not implemented"));
 }
 
 // ═══════════════════════════════════════════════════════════════════

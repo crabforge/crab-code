@@ -1,12 +1,14 @@
 pub mod client;
 pub mod discovery;
+pub mod manager;
 pub mod protocol;
 pub mod resource;
 pub mod server;
 pub mod transport;
 
 pub use client::McpClient;
-pub use discovery::{McpServerConfig, McpTransportConfig};
+pub use discovery::{McpServerConfig, McpTransportConfig, connect_server, parse_mcp_servers};
+pub use manager::{DiscoveredTool, McpManager};
 pub use protocol::{
     ClientCapabilities, ClientInfo, InitializeParams, InitializeResult, JsonRpcError,
     JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, McpPrompt, McpResource, McpToolDef,
