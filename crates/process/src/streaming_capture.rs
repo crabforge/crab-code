@@ -114,7 +114,11 @@ impl OutputFilter {
     #[must_use]
     pub fn classify(&self, line: &str) -> LineKind {
         // Check error first (highest priority)
-        if self.error_patterns.iter().any(|p| line.contains(p.as_str())) {
+        if self
+            .error_patterns
+            .iter()
+            .any(|p| line.contains(p.as_str()))
+        {
             return LineKind::Error;
         }
         if self
@@ -241,7 +245,10 @@ impl StreamingCapture {
     /// Count of error lines.
     #[must_use]
     pub fn error_count(&self) -> usize {
-        self.lines.iter().filter(|l| l.kind == LineKind::Error).count()
+        self.lines
+            .iter()
+            .filter(|l| l.kind == LineKind::Error)
+            .count()
     }
 
     /// Count of warning lines.
@@ -454,7 +461,10 @@ mod tests {
     #[test]
     fn filter_classifies_error() {
         let f = OutputFilter::new();
-        assert_eq!(f.classify("error[E0308]: mismatched types"), LineKind::Error);
+        assert_eq!(
+            f.classify("error[E0308]: mismatched types"),
+            LineKind::Error
+        );
         assert_eq!(f.classify("fatal: not a git repository"), LineKind::Error);
     }
 
@@ -465,10 +475,7 @@ mod tests {
             f.classify("warning: unused variable `x`"),
             LineKind::Warning
         );
-        assert_eq!(
-            f.classify("This API is deprecated"),
-            LineKind::Warning
-        );
+        assert_eq!(f.classify("This API is deprecated"), LineKind::Warning);
     }
 
     #[test]

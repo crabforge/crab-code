@@ -139,13 +139,10 @@ impl ProgressParser {
                 }
 
                 if *phase == "Compiling" || *phase == "Checking" {
-                    let count = self
-                        .cargo_state
-                        .get_or_insert((0, None));
+                    let count = self.cargo_state.get_or_insert((0, None));
                     count.0 += 1;
                     let target = rest.split_whitespace().next().unwrap_or(rest);
-                    let mut evt =
-                        ProgressEvent::phase("cargo", *phase).with_target(target);
+                    let mut evt = ProgressEvent::phase("cargo", *phase).with_target(target);
                     if let Some(total) = count.1 {
                         evt = evt.with_progress(count.0, total);
                     }
@@ -243,9 +240,7 @@ impl Default for ProgressParser {
 /// Returns `None` if the phase is not found.
 fn trimmed_after_phase<'a>(line: &'a str, phase: &str) -> Option<&'a str> {
     let trimmed = line.trim_start();
-    trimmed
-        .strip_prefix(phase)
-        .map(str::trim_start)
+    trimmed.strip_prefix(phase).map(str::trim_start)
 }
 
 /// Extract a percentage from a string like "45%" or " 45%".
@@ -301,8 +296,7 @@ mod tests {
 
     #[test]
     fn event_with_progress() {
-        let evt = ProgressEvent::phase("git", "Receiving")
-            .with_progress(50, 100);
+        let evt = ProgressEvent::phase("git", "Receiving").with_progress(50, 100);
         assert_eq!(evt.current, Some(50));
         assert_eq!(evt.total, Some(100));
         assert_eq!(evt.percent, Some(50));
@@ -407,9 +401,7 @@ mod tests {
     #[test]
     fn parse_git_receiving_objects() {
         let mut p = ProgressParser::new();
-        let evt = p
-            .parse_line("Receiving objects:  45% (123/274)")
-            .unwrap();
+        let evt = p.parse_line("Receiving objects:  45% (123/274)").unwrap();
         assert_eq!(evt.tool, "git");
         assert_eq!(evt.phase, "Receiving objects");
         assert_eq!(evt.percent, Some(45));
@@ -431,9 +423,7 @@ mod tests {
     #[test]
     fn parse_git_enumerating() {
         let mut p = ProgressParser::new();
-        let evt = p
-            .parse_line("Enumerating objects: 274, done.")
-            .unwrap();
+        let evt = p.parse_line("Enumerating objects: 274, done.").unwrap();
         assert_eq!(evt.tool, "git");
         assert_eq!(evt.phase, "Enumerating objects");
     }
