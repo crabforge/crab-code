@@ -467,4 +467,149 @@ mod tests {
         let reg = SkillRegistry::default();
         assert!(reg.is_empty());
     }
+
+    #[test]
+    fn parse_skill_content_pattern_trigger() {
+        let content = "---\nname: fix-bug\ndescription: Fix a bug\ntrigger:\n  type: pattern\n  regex: (?i)fix\\s+bug\n---\nFixing instructions here.";
+        let skill = parse_skill_content(content, None).unwrap();
+        assert_eq!(skill.name, "fix-bug");
+        assert!(matches!(skill.trigger, SkillTrigger::Pattern { .. }));
+        assert_eq!(skill.content, "Fixing instructions here.");
+    }
+
+    #[test]
+    fn parse_skill_content_name_from_frontmatter() {
+        // Skill name comes from frontmatter, source_path is stored
+        let content = "---\nname: my-skill\ndescription: Test\n---\nBody.";
+        let path = Path::new("/skills/my-skill.md");
+        let skill = parse_skill_content(content, Some(path)).unwrap();
+        assert_eq!(skill.name, "my-skill");
+        assert_eq!(skill.source_path.unwrap(), Path::new("/skills/my-skill.md"));
+    }
+
+    #[test]
+    fn registry_match_input_manual_never_matches() {
+        let mut reg = SkillRegistry::new();
+        reg.register(Skill {
+            name: "manual-skill".into(),
+            description: String::new(),
+            trigger: SkillTrigger::Manual,
+            content: String::new(),
+            source_path: None,
+        });
+        assert!(reg.match_input("manual-skill").is_empty());
+        assert!(reg.match_input("/manual-skill").is_empty());
+    }
+
+    #[test]
+    fn registry_list_returns_all() {
+        let mut reg = SkillRegistry::new();
+        reg.register(Skill {
+            name: "a".into(),
+            description: String::new(),
+            trigger: SkillTrigger::Manual,
+            content: String::new(),
+            source_path: None,
+        });
+        reg.register(Skill {
+            name: "b".into(),
+            description: String::new(),
+            trigger: SkillTrigger::Manual,
+            content: String::new(),
+            source_path: None,
+        });
+        assert_eq!(reg.list().len(), 2);
+    }
+
+    #[test]
+    fn skill_trigger_default_is_manual() {
+        let trigger = SkillTrigger::default();
+        assert!(matches!(trigger, SkillTrigger::Manual));
+    }
+
+    #[test]
+    fn split_frontmatter_multiline_body() {
+        let content = "---\nname: test\n---\nLine 1\nLine 2\nLine 3";
+        let (fm, body) = split_frontmatter(content).unwrap();
+        assert_eq!(fm, "name: test");
+        assert!(body.contains("Line 1"));
+        assert!(body.contains("Line 3"));
+    }
+
+    #[test]
+    fn parse_simple_yaml_empty_lines() {
+        let yaml = "name: test\n\ndescription: with gaps";
+        let val = parse_simple_yaml(yaml);
+        assert_eq!(val["name"], "test");
+        assert_eq!(val["description"], "with gaps");
+    }
+
+    #[test]
+    fn registry_discover_with_skill_files() {
+        let tmp = std::env::temp_dir().join("crab_skill_test_discover");
+        let _ = std::fs::create_dir_all(&tmp);
+        std::fs::write(
+            tmp.join("commit.md"),
+            "---\nname: commit\ndescription: Create commit\ntrigger:\n  type: command\n  name: commit\n---\nCommit helper.",
+        ).unwrap();
+
+        let reg = SkillRegistry::discover(&[tmp.clone()]).unwrap();
+        assert_eq!(reg.len(), 1);
+        assert!(reg.find("commit").is_some());
+        assert!(reg.find_command("commit").is_some());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn registry_discover_skips_non_md_files() {
+        let tmp = std::env::temp_dir().join("crab_skill_test_nonmd");
+        let _ = std::fs::create_dir_all(&tmp);
+        std::fs::write(tmp.join("notes.txt"), "not a skill").unwrap();
+        let reg = SkillRegistry::discover(&[tmp.clone()]).unwrap();
+        assert!(reg.is_empty());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn skill_serde_roundtrip() {
+        let skill = Skill {
+            name: "test".into(),
+            description: "A test".into(),
+            trigger: SkillTrigger::Command {
+                name: "test".into(),
+            },
+            content: String::new(),
+            source_path: None,
+        };
+        let json = serde_json::to_string(&skill).unwrap();
+        let parsed: Skill = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "test");
+        assert!(matches!(parsed.trigger, SkillTrigger::Command { name } if name == "test"));
+    }
+
+    #[test]
+    fn registry_match_input_multiple_matches() {
+        let mut reg = SkillRegistry::new();
+        reg.register(Skill {
+            name: "broad".into(),
+            description: String::new(),
+            trigger: SkillTrigger::Pattern {
+                regex: r".*".into(),
+            },
+            content: String::new(),
+            source_path: None,
+        });
+        reg.register(Skill {
+            name: "specific".into(),
+            description: String::new(),
+            trigger: SkillTrigger::Pattern {
+                regex: r"fix".into(),
+            },
+            content: String::new(),
+            source_path: None,
+        });
+        let matches = reg.match_input("fix this bug");
+        assert_eq!(matches.len(), 2);
+    }
 }

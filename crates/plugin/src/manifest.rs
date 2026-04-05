@@ -288,4 +288,103 @@ mod tests {
         // Cleanup
         let _ = std::fs::remove_dir_all(&tmp);
     }
+
+    #[test]
+    fn manifest_serde_roundtrip() {
+        let m = PluginManifest {
+            name: "test-plugin".into(),
+            description: "A test".into(),
+            version: "1.0.0".into(),
+            kind: PluginKind::Wasm,
+            author: "dev".into(),
+            entry: "plugin.wasm".into(),
+            permissions: vec!["fs:read".into()],
+            source_dir: None,
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        let parsed: PluginManifest = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "test-plugin");
+        assert_eq!(parsed.kind, PluginKind::Wasm);
+        assert_eq!(parsed.permissions, vec!["fs:read"]);
+    }
+
+    #[test]
+    fn load_manifest_from_temp_file() {
+        let tmp = std::env::temp_dir().join("crab_manifest_test_load");
+        let _ = std::fs::create_dir_all(&tmp);
+        let manifest_path = tmp.join("plugin.json");
+        std::fs::write(
+            &manifest_path,
+            r#"{"name": "loaded-plugin", "version": "2.0.0", "kind": "wasm"}"#,
+        )
+        .unwrap();
+
+        let manifest = load_manifest(&manifest_path).unwrap();
+        assert_eq!(manifest.name, "loaded-plugin");
+        assert_eq!(manifest.version, "2.0.0");
+        assert_eq!(manifest.kind, PluginKind::Wasm);
+        assert!(manifest.source_dir.is_some());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn load_manifest_invalid_json() {
+        let tmp = std::env::temp_dir().join("crab_manifest_test_invalid");
+        let _ = std::fs::create_dir_all(&tmp);
+        std::fs::write(tmp.join("plugin.json"), "not json").unwrap();
+        assert!(load_manifest(&tmp.join("plugin.json")).is_err());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn load_manifest_empty_name_fails() {
+        let tmp = std::env::temp_dir().join("crab_manifest_test_empty_name");
+        let _ = std::fs::create_dir_all(&tmp);
+        std::fs::write(tmp.join("plugin.json"), r#"{"name": ""}"#).unwrap();
+        assert!(load_manifest(&tmp.join("plugin.json")).is_err());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn load_manifest_nonexistent_file() {
+        assert!(load_manifest(Path::new("/no/such/plugin.json")).is_err());
+    }
+
+    #[test]
+    fn discover_multiple_plugins() {
+        let tmp = std::env::temp_dir().join("crab_plugin_test_multi");
+        for name in ["plugin-a", "plugin-b"] {
+            let dir = tmp.join(name);
+            let _ = std::fs::create_dir_all(&dir);
+            std::fs::write(dir.join("plugin.json"), format!(r#"{{"name": "{name}"}}"#)).unwrap();
+        }
+
+        let manifests = discover_plugins(&tmp);
+        assert_eq!(manifests.len(), 2);
+        let names: Vec<_> = manifests.iter().map(|m| m.name.as_str()).collect();
+        assert!(names.contains(&"plugin-a"));
+        assert!(names.contains(&"plugin-b"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn discover_skips_files_at_root() {
+        let tmp = std::env::temp_dir().join("crab_plugin_test_root_file");
+        let _ = std::fs::create_dir_all(&tmp);
+        // plugin.json at root level (not in subdir) should be skipped
+        std::fs::write(tmp.join("plugin.json"), r#"{"name": "root-plugin"}"#).unwrap();
+
+        let manifests = discover_plugins(&tmp);
+        assert!(manifests.is_empty());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn plugin_kind_equality() {
+        assert_eq!(PluginKind::Skill, PluginKind::Skill);
+        assert_ne!(PluginKind::Skill, PluginKind::Wasm);
+    }
 }

@@ -1,4 +1,7 @@
 mod commands;
+mod completions;
+mod json_output;
+mod output;
 mod setup;
 
 use std::io::Write;
@@ -7,6 +10,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
+use clap_complete::Shell;
 
 use crab_agent::{AgentSession, SessionConfig, build_system_prompt};
 use crab_core::event::Event;
@@ -43,6 +47,10 @@ struct Cli {
     #[arg(long)]
     dangerously_skip_permissions: bool,
 
+    /// Output results as newline-delimited JSON (machine-readable)
+    #[arg(long)]
+    json: bool,
+
     /// Resume a previous session by ID
     #[arg(long)]
     resume: Option<String>,
@@ -58,6 +66,21 @@ enum CliCommand {
     Session {
         #[command(subcommand)]
         action: SessionAction,
+    },
+    /// Run as an MCP server (expose tools to external MCP clients)
+    Serve(commands::serve::ServeArgs),
+    /// Manage configuration
+    Config {
+        #[command(subcommand)]
+        action: commands::config::ConfigAction,
+    },
+    /// Initialize a new project from a template
+    Init(commands::init::InitArgs),
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for (bash, zsh, fish, powershell)
+        #[arg(value_enum)]
+        shell: Shell,
     },
 }
 
@@ -81,14 +104,42 @@ enum SessionAction {
         /// Session ID to delete
         id: String,
     },
+    /// Search history sessions for a keyword
+    Search {
+        /// Keyword to search for
+        keyword: String,
+    },
+    /// Export a session to JSON or Markdown
+    Export {
+        /// Session ID to export
+        id: String,
+        /// Output format: "json" or "markdown" (default: markdown)
+        #[arg(long, default_value = "markdown")]
+        format: String,
+    },
+    /// Show statistics for a session
+    Stats {
+        /// Session ID
+        id: String,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Handle subcommands that don't need the async runtime
+    // Handle subcommands
     if let Some(command) = &cli.command {
         return match command {
+            CliCommand::Completions { shell } => {
+                completions::generate_completions(*shell);
+                Ok(())
+            }
+            CliCommand::Config { action } => commands::config::run(action),
+            CliCommand::Init(args) => commands::init::run(args),
+            CliCommand::Serve(args) => {
+                let rt = tokio::runtime::Runtime::new()?;
+                rt.block_on(commands::serve::run(args))
+            }
             CliCommand::Session { action } => match action {
                 SessionAction::List => commands::session::list_sessions(),
                 SessionAction::Show { id } => commands::session::show_session(id),
@@ -99,6 +150,11 @@ fn main() -> anyhow::Result<()> {
                     rt.block_on(run_with_resume(&cli, Some(id.clone())))
                 }
                 SessionAction::Delete { id } => commands::session::delete_session(id),
+                SessionAction::Search { keyword } => commands::session::search_sessions(keyword),
+                SessionAction::Export { id, format } => {
+                    commands::session::export_session(id, format)
+                }
+                SessionAction::Stats { id } => commands::session::show_stats(id),
             },
         };
     }
@@ -199,9 +255,11 @@ async fn run(cli: &Cli, resume_session_id: Option<String>) -> anyhow::Result<()>
         resume_session_id,
     };
 
-    eprintln!(
-        "crab-code v{} (provider={provider}, model={model_id}, permissions={permission_mode})",
+    output::banner(
         env!("CARGO_PKG_VERSION"),
+        &provider,
+        &model_id,
+        &permission_mode,
     );
 
     if let Some(ref prompt) = cli.prompt {
@@ -211,7 +269,7 @@ async fn run(cli: &Cli, resume_session_id: Option<String>) -> anyhow::Result<()>
         session
             .executor
             .set_permission_handler(Arc::new(CliPermissionHandler));
-        run_single_shot(&mut session, &effective_prompt).await
+        run_single_shot(&mut session, &effective_prompt, cli.json).await
     } else {
         // Interactive mode: TUI if available, else line-based REPL
         #[cfg(feature = "tui")]
@@ -219,6 +277,7 @@ async fn run(cli: &Cli, resume_session_id: Option<String>) -> anyhow::Result<()>
             let tui_config = crab_tui::TuiConfig {
                 session_config,
                 backend,
+                skill_dirs,
             };
             crab_tui::run(tui_config).await
         }
@@ -320,9 +379,13 @@ impl PermissionHandler for CliPermissionHandler {
 }
 
 /// Run a single prompt, print the result, and exit.
-async fn run_single_shot(session: &mut AgentSession, prompt: &str) -> anyhow::Result<()> {
+async fn run_single_shot(
+    session: &mut AgentSession,
+    prompt: &str,
+    json_mode: bool,
+) -> anyhow::Result<()> {
     let event_rx = take_event_rx(session);
-    let printer = tokio::spawn(print_events(event_rx));
+    let printer = tokio::spawn(print_events(event_rx, json_mode));
 
     let result = session.handle_user_input(prompt).await;
     // Drop the event_tx side so printer finishes
@@ -372,7 +435,7 @@ async fn run_repl(
         let effective_input = resolve_slash_command(input, skill_registry);
 
         let event_rx = take_event_rx(session);
-        let printer = tokio::spawn(print_events(event_rx));
+        let printer = tokio::spawn(print_events(event_rx, false));
 
         match session.handle_user_input(&effective_input).await {
             Ok(()) => {}
@@ -397,54 +460,63 @@ fn take_event_rx(session: &mut AgentSession) -> mpsc::Receiver<Event> {
 }
 
 /// Drain events from the receiver and print them to stdout/stderr.
-async fn print_events(mut rx: mpsc::Receiver<Event>) {
+///
+/// When `json_mode` is true, emits newline-delimited JSON to stdout.
+/// Otherwise uses colored human-readable output.
+async fn print_events(mut rx: mpsc::Receiver<Event>, json_mode: bool) {
     let mut stdout = std::io::stdout();
+    let mut spinner: Option<output::Spinner> = None;
+
     while let Some(event) = rx.recv().await {
+        if json_mode {
+            if let Some(value) = json_output::event_to_json(&event) {
+                json_output::print_json_line(&value);
+            }
+            continue;
+        }
+
         match event {
             Event::ContentDelta { delta, .. } => {
+                // Stop spinner when content starts streaming
+                if let Some(mut s) = spinner.take() {
+                    s.stop();
+                }
                 print!("{delta}");
                 let _ = stdout.flush();
             }
             Event::ToolUseStart { name, .. } => {
-                eprintln!("\n[tool] {name}");
-            }
-            Event::ToolResult { id: _, output } => {
-                if output.is_error {
-                    eprintln!("[tool error] {}", output.text());
-                } else {
-                    let text = output.text();
-                    if text.len() > 500 {
-                        eprintln!("[tool result] {}...", &text[..500]);
-                    } else {
-                        eprintln!("[tool result] {text}");
-                    }
+                // Stop any previous spinner before starting a new one
+                if let Some(mut s) = spinner.take() {
+                    s.stop();
                 }
+                output::tool_use(&name);
+                spinner = Some(output::Spinner::start(&format!("running {name}...")));
+            }
+            Event::ToolResult { id: _, output: o } => {
+                if let Some(mut s) = spinner.take() {
+                    s.stop();
+                }
+                output::tool_result(&o.text(), o.is_error);
             }
             Event::Error { message } => {
-                eprintln!("[error] {message}");
+                output::error(&message);
             }
             Event::TokenWarning {
                 usage_pct,
                 used,
                 limit,
             } => {
-                eprintln!(
-                    "[warn] Token usage {:.0}% ({used}/{limit})",
-                    usage_pct * 100.0,
-                );
+                output::token_warning(usage_pct, used, limit);
             }
             Event::CompactStart { strategy, .. } => {
-                eprintln!("[compact] Starting compaction: {strategy}");
+                output::compact_start(&strategy);
             }
             Event::CompactEnd {
                 after_tokens,
                 removed_messages,
             } => {
-                eprintln!(
-                    "[compact] Compacted: removed {removed_messages} messages, now {after_tokens} tokens"
-                );
+                output::compact_end(removed_messages, after_tokens);
             }
-            // Events that don't need console output
             _ => {}
         }
     }
@@ -518,5 +590,35 @@ mod tests {
         let result = resolve_slash_command("/review src/main.rs", &reg);
         assert!(result.contains("Review the code."));
         assert!(result.contains("src/main.rs"));
+    }
+
+    #[test]
+    fn cli_parses_json_flag() {
+        let cli = Cli::try_parse_from(["crab", "--json", "hello"]).unwrap();
+        assert!(cli.json);
+        assert_eq!(cli.prompt.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn cli_json_defaults_to_false() {
+        let cli = Cli::try_parse_from(["crab", "hello"]).unwrap();
+        assert!(!cli.json);
+    }
+
+    #[test]
+    fn cli_parses_completions_subcommand() {
+        let cli = Cli::try_parse_from(["crab", "completions", "bash"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(CliCommand::Completions { shell: Shell::Bash })
+        ));
+    }
+
+    #[test]
+    fn cli_completions_all_shells() {
+        for shell in ["bash", "zsh", "fish", "powershell"] {
+            let cli = Cli::try_parse_from(["crab", "completions", shell]).unwrap();
+            assert!(matches!(cli.command, Some(CliCommand::Completions { .. })));
+        }
     }
 }

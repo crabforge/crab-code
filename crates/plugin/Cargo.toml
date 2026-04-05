@@ -18,6 +18,9 @@ tracing.workspace = true
 regex.workspace = true
 wasmtime = { workspace = true, optional = true }
 
+[dev-dependencies]
+wat.workspace = true
+
 [features]
 default = []
 wasm = ["wasmtime"]

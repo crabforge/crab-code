@@ -27,9 +27,17 @@ crab-plugin.workspace = true
 crab-telemetry.workspace = true
 crab-tui = { workspace = true, optional = true }
 clap.workspace = true
+clap_complete.workspace = true
+owo-colors.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 futures.workspace = true
 anyhow.workspace = true
+serde_json.workspace = true
+jsonc-parser.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [features]
 default = ["tui"]

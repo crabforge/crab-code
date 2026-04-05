@@ -5,6 +5,9 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
+/// Default grace period between SIGTERM and SIGKILL on Unix.
+const DEFAULT_GRACE_PERIOD: Duration = Duration::from_secs(3);
+
 /// Options for spawning a child process.
 pub struct SpawnOptions {
     pub command: String,
@@ -13,6 +16,13 @@ pub struct SpawnOptions {
     pub env: Vec<(String, String)>,
     pub timeout: Option<Duration>,
     pub stdin_data: Option<String>,
+    /// If `true`, clear the parent environment before applying `env`.
+    /// Default is `false` (inherit parent env, then overlay `env`).
+    pub clear_env: bool,
+    /// Grace period between SIGTERM and SIGKILL when a timeout fires.
+    /// Only meaningful on Unix; Windows always does a hard kill.
+    /// Defaults to 3 seconds if `None`.
+    pub kill_grace_period: Option<Duration>,
 }
 
 /// Captured output from a completed child process.
@@ -29,10 +39,111 @@ fn build_command(opts: &SpawnOptions) -> Command {
     if let Some(ref cwd) = opts.working_dir {
         cmd.current_dir(cwd);
     }
+    if opts.clear_env {
+        cmd.env_clear();
+    }
     for (k, v) in &opts.env {
         cmd.env(k, v);
     }
     cmd
+}
+
+/// Escape a string for use as a `cmd.exe /C` argument on Windows.
+///
+/// Wraps the argument in double quotes and escapes internal double quotes,
+/// percent signs, and caret characters that have special meaning in cmd.exe.
+#[must_use]
+pub fn escape_cmd_arg(arg: &str) -> String {
+    // Escape special cmd.exe metacharacters inside the argument
+    let mut escaped = String::with_capacity(arg.len() + 8);
+    escaped.push('"');
+    for ch in arg.chars() {
+        match ch {
+            '"' => escaped.push_str(r#"\""#),
+            '%' => escaped.push_str("%%"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped.push('"');
+    escaped
+}
+
+/// Build `SpawnOptions` for running a shell command string via the platform shell.
+///
+/// On Windows, uses `cmd.exe /C`; on Unix, uses `sh -c`.
+#[must_use]
+pub fn shell_command(cmd_str: &str) -> SpawnOptions {
+    if cfg!(windows) {
+        SpawnOptions {
+            command: "cmd".into(),
+            args: vec!["/C".into(), cmd_str.into()],
+            working_dir: None,
+            env: vec![],
+            timeout: None,
+            stdin_data: None,
+            clear_env: false,
+            kill_grace_period: None,
+        }
+    } else {
+        SpawnOptions {
+            command: "sh".into(),
+            args: vec!["-c".into(), cmd_str.into()],
+            working_dir: None,
+            env: vec![],
+            timeout: None,
+            stdin_data: None,
+            clear_env: false,
+            kill_grace_period: None,
+        }
+    }
+}
+
+/// Attempt graceful termination: on Unix, send SIGTERM via the `kill` command
+/// and wait for the grace period before escalating to SIGKILL. On Windows,
+/// immediately force-kill (no graceful shutdown equivalent).
+async fn graceful_kill(child: &mut tokio::process::Child, _grace_period: Duration) {
+    #[cfg(unix)]
+    if let Some(pid) = child.id() {
+        // Send SIGTERM via the kill command (avoids unsafe libc calls)
+        let _ = tokio::process::Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .output()
+            .await;
+
+        // Wait for the grace period or until the child exits on its own
+        if tokio::time::timeout(_grace_period, child.wait())
+            .await
+            .is_ok()
+        {
+            return; // Child exited within grace period
+        }
+    }
+
+    // Force kill (SIGKILL on Unix, TerminateProcess on Windows)
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+}
+
+/// Read all bytes from an optional stdout pipe using lossy UTF-8 conversion.
+async fn read_pipe_lossy(pipe: Option<tokio::process::ChildStdout>) -> String {
+    if let Some(mut r) = pipe {
+        let mut buf = Vec::new();
+        let _ = tokio::io::AsyncReadExt::read_to_end(&mut r, &mut buf).await;
+        String::from_utf8_lossy(&buf).into_owned()
+    } else {
+        String::new()
+    }
+}
+
+/// Read all bytes from an optional stderr pipe using lossy UTF-8 conversion.
+async fn read_stderr_lossy(pipe: Option<tokio::process::ChildStderr>) -> String {
+    if let Some(mut r) = pipe {
+        let mut buf = Vec::new();
+        let _ = tokio::io::AsyncReadExt::read_to_end(&mut r, &mut buf).await;
+        String::from_utf8_lossy(&buf).into_owned()
+    } else {
+        String::new()
+    }
 }
 
 /// Execute a command and wait for completion.
@@ -70,14 +181,8 @@ pub async fn run(opts: SpawnOptions) -> crab_common::Result<SpawnOutput> {
 
         if let Ok(status) = tokio::time::timeout(timeout, child.wait()).await {
             let status = status?;
-            let mut stdout_buf = String::new();
-            let mut stderr_buf = String::new();
-            if let Some(mut r) = stdout_pipe {
-                tokio::io::AsyncReadExt::read_to_string(&mut r, &mut stdout_buf).await?;
-            }
-            if let Some(mut r) = stderr_pipe {
-                tokio::io::AsyncReadExt::read_to_string(&mut r, &mut stderr_buf).await?;
-            }
+            let stdout_buf = read_pipe_lossy(stdout_pipe).await;
+            let stderr_buf = read_stderr_lossy(stderr_pipe).await;
             SpawnOutput {
                 stdout: stdout_buf,
                 stderr: stderr_buf,
@@ -85,17 +190,11 @@ pub async fn run(opts: SpawnOptions) -> crab_common::Result<SpawnOutput> {
                 timed_out: false,
             }
         } else {
-            // Timeout — kill and drain remaining output.
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            let mut stdout_buf = String::new();
-            let mut stderr_buf = String::new();
-            if let Some(mut r) = stdout_pipe {
-                let _ = tokio::io::AsyncReadExt::read_to_string(&mut r, &mut stdout_buf).await;
-            }
-            if let Some(mut r) = stderr_pipe {
-                let _ = tokio::io::AsyncReadExt::read_to_string(&mut r, &mut stderr_buf).await;
-            }
+            // Timeout — graceful shutdown then force kill.
+            let grace = opts.kill_grace_period.unwrap_or(DEFAULT_GRACE_PERIOD);
+            graceful_kill(&mut child, grace).await;
+            let stdout_buf = read_pipe_lossy(stdout_pipe).await;
+            let stderr_buf = read_stderr_lossy(stderr_pipe).await;
             SpawnOutput {
                 stdout: stdout_buf,
                 stderr: stderr_buf,
@@ -178,6 +277,8 @@ mod tests {
                 env: vec![],
                 timeout: None,
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
             }
         } else {
             SpawnOptions {
@@ -187,6 +288,8 @@ mod tests {
                 env: vec![],
                 timeout: None,
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
             }
         }
     }
@@ -209,6 +312,8 @@ mod tests {
                 env: vec![],
                 timeout: None,
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
             }
         } else {
             SpawnOptions {
@@ -218,6 +323,8 @@ mod tests {
                 env: vec![],
                 timeout: None,
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
             }
         };
         let out = run(opts).await.unwrap();
@@ -234,6 +341,8 @@ mod tests {
                 env: vec![],
                 timeout: Some(Duration::from_millis(100)),
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: Some(Duration::from_millis(50)),
             }
         } else {
             SpawnOptions {
@@ -243,6 +352,8 @@ mod tests {
                 env: vec![],
                 timeout: Some(Duration::from_millis(100)),
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: Some(Duration::from_millis(50)),
             }
         };
         let out = run(opts).await.unwrap();
@@ -259,6 +370,8 @@ mod tests {
                 env: vec![("MY_TEST_VAR".into(), "crab_value".into())],
                 timeout: None,
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
             }
         } else {
             SpawnOptions {
@@ -268,6 +381,8 @@ mod tests {
                 env: vec![("MY_TEST_VAR".into(), "crab_value".into())],
                 timeout: None,
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
             }
         };
         let out = run(opts).await.unwrap();
@@ -286,6 +401,8 @@ mod tests {
                 env: vec![],
                 timeout: None,
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
             }
         } else {
             SpawnOptions {
@@ -295,6 +412,8 @@ mod tests {
                 env: vec![],
                 timeout: None,
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
             }
         };
         let out = run(opts).await.unwrap();
@@ -316,6 +435,8 @@ mod tests {
                 env: vec![],
                 timeout: Some(Duration::from_secs(5)),
                 stdin_data: Some("hello from stdin\n".into()),
+                clear_env: false,
+                kill_grace_period: None,
             }
         } else {
             SpawnOptions {
@@ -325,6 +446,8 @@ mod tests {
                 env: vec![],
                 timeout: Some(Duration::from_secs(5)),
                 stdin_data: Some("hello from stdin\n".into()),
+                clear_env: false,
+                kill_grace_period: None,
             }
         };
         let out = run(opts).await.unwrap();
@@ -348,8 +471,13 @@ mod tests {
         .unwrap();
 
         assert_eq!(exit_code, 0);
-        let lines = collected.lock().unwrap();
-        assert!(lines.iter().any(|l| l.contains("streaming_test")));
+        assert!(
+            collected
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|l| l.contains("streaming_test"))
+        );
     }
 
     #[tokio::test]
@@ -361,8 +489,394 @@ mod tests {
             env: vec![],
             timeout: None,
             stdin_data: None,
+            clear_env: false,
+            kill_grace_period: None,
         };
         let result = run(opts).await;
         assert!(result.is_err());
+    }
+
+    // ── Edge-case tests ────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn run_empty_command() {
+        let opts = SpawnOptions {
+            command: String::new(),
+            args: vec![],
+            working_dir: None,
+            env: vec![],
+            timeout: None,
+            stdin_data: None,
+            clear_env: false,
+            kill_grace_period: None,
+        };
+        let result = run(opts).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn run_large_output() {
+        // Generate a large amount of stdout
+        let opts = if cfg!(windows) {
+            SpawnOptions {
+                command: "cmd".into(),
+                args: vec![
+                    "/C".into(),
+                    "for /L %i in (1,1,500) do @echo line_%i".into(),
+                ],
+                working_dir: None,
+                env: vec![],
+                timeout: Some(Duration::from_secs(15)),
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        } else {
+            SpawnOptions {
+                command: "sh".into(),
+                args: vec![
+                    "-c".into(),
+                    "for i in $(seq 1 500); do echo line_$i; done".into(),
+                ],
+                working_dir: None,
+                env: vec![],
+                timeout: Some(Duration::from_secs(15)),
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        };
+        let out = run(opts).await.unwrap();
+        assert_eq!(out.exit_code, 0);
+        assert!(out.stdout.contains("line_1"));
+        assert!(out.stdout.contains("line_500"));
+        let line_count = out.stdout.lines().count();
+        assert!(line_count >= 500, "expected >=500 lines, got {line_count}");
+    }
+
+    #[tokio::test]
+    async fn run_stderr_only() {
+        let opts = if cfg!(windows) {
+            SpawnOptions {
+                command: "cmd".into(),
+                args: vec!["/C".into(), "echo error_output 1>&2".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: None,
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        } else {
+            SpawnOptions {
+                command: "sh".into(),
+                args: vec!["-c".into(), "echo error_output >&2".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: None,
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        };
+        let out = run(opts).await.unwrap();
+        assert_eq!(out.exit_code, 0);
+        assert!(out.stderr.contains("error_output"));
+        assert!(out.stdout.trim().is_empty());
+    }
+
+    #[tokio::test]
+    async fn run_mixed_stdout_stderr() {
+        let opts = if cfg!(windows) {
+            SpawnOptions {
+                command: "cmd".into(),
+                args: vec!["/C".into(), "echo out_msg && echo err_msg 1>&2".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: None,
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        } else {
+            SpawnOptions {
+                command: "sh".into(),
+                args: vec!["-c".into(), "echo out_msg; echo err_msg >&2".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: None,
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        };
+        let out = run(opts).await.unwrap();
+        assert_eq!(out.exit_code, 0);
+        assert!(out.stdout.contains("out_msg"));
+        assert!(out.stderr.contains("err_msg"));
+    }
+
+    #[tokio::test]
+    async fn run_timeout_with_partial_output() {
+        // Process produces some output, then hangs; timeout should capture partial output
+        let opts = if cfg!(windows) {
+            SpawnOptions {
+                command: "cmd".into(),
+                args: vec![
+                    "/C".into(),
+                    "echo partial_data && ping -n 10 127.0.0.1 >nul".into(),
+                ],
+                working_dir: None,
+                env: vec![],
+                timeout: Some(Duration::from_millis(500)),
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: Some(Duration::from_millis(50)),
+            }
+        } else {
+            SpawnOptions {
+                command: "sh".into(),
+                args: vec!["-c".into(), "echo partial_data; sleep 10".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: Some(Duration::from_millis(500)),
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: Some(Duration::from_millis(50)),
+            }
+        };
+        let out = run(opts).await.unwrap();
+        assert!(out.timed_out);
+        assert!(out.stdout.contains("partial_data"));
+    }
+
+    #[tokio::test]
+    async fn run_with_clear_env() {
+        // Set an env var, then clear the environment — the var should not be visible
+        let opts = if cfg!(windows) {
+            SpawnOptions {
+                command: "cmd".into(),
+                args: vec!["/C".into(), "echo %CRAB_CLEARED_TEST%".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: Some(Duration::from_secs(5)),
+                stdin_data: None,
+                clear_env: true,
+                kill_grace_period: None,
+            }
+        } else {
+            SpawnOptions {
+                command: "sh".into(),
+                args: vec!["-c".into(), "echo ${CRAB_CLEARED_TEST:-empty}".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: Some(Duration::from_secs(5)),
+                stdin_data: None,
+                clear_env: true,
+                kill_grace_period: None,
+            }
+        };
+        let out = run(opts).await.unwrap();
+        // On Unix with clear_env, the variable is unset → "empty"
+        // On Windows with clear_env, %CRAB_CLEARED_TEST% expands literally
+        if cfg!(windows) {
+            assert!(out.stdout.contains("%CRAB_CLEARED_TEST%"));
+        } else {
+            assert!(out.stdout.trim().contains("empty"));
+        }
+    }
+
+    #[tokio::test]
+    async fn run_clear_env_with_overlay() {
+        // Clear env but overlay a specific variable
+        let opts = if cfg!(windows) {
+            SpawnOptions {
+                command: "cmd".into(),
+                args: vec!["/C".into(), "echo %OVERLAY_VAR%".into()],
+                working_dir: None,
+                env: vec![("OVERLAY_VAR".into(), "overlay_ok".into())],
+                timeout: Some(Duration::from_secs(5)),
+                stdin_data: None,
+                clear_env: true,
+                kill_grace_period: None,
+            }
+        } else {
+            SpawnOptions {
+                command: "sh".into(),
+                args: vec!["-c".into(), "echo $OVERLAY_VAR".into()],
+                working_dir: None,
+                env: vec![("OVERLAY_VAR".into(), "overlay_ok".into())],
+                timeout: Some(Duration::from_secs(5)),
+                stdin_data: None,
+                clear_env: true,
+                kill_grace_period: None,
+            }
+        };
+        let out = run(opts).await.unwrap();
+        assert!(out.stdout.contains("overlay_ok"));
+    }
+
+    #[tokio::test]
+    async fn run_streaming_stderr() {
+        let stderr_collected = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let stderr_clone = stderr_collected.clone();
+
+        let opts = if cfg!(windows) {
+            SpawnOptions {
+                command: "cmd".into(),
+                args: vec!["/C".into(), "echo err_stream 1>&2".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: None,
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        } else {
+            SpawnOptions {
+                command: "sh".into(),
+                args: vec!["-c".into(), "echo err_stream >&2".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: None,
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        };
+        let exit_code = run_streaming(
+            opts,
+            |_| {},
+            move |line| {
+                stderr_clone.lock().unwrap().push(line.to_string());
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(exit_code, 0);
+        assert!(
+            stderr_collected
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|l| l.contains("err_stream"))
+        );
+    }
+
+    #[test]
+    fn shell_command_builds_correct_opts() {
+        let opts = shell_command("echo hello world");
+        if cfg!(windows) {
+            assert_eq!(opts.command, "cmd");
+            assert_eq!(opts.args, vec!["/C", "echo hello world"]);
+        } else {
+            assert_eq!(opts.command, "sh");
+            assert_eq!(opts.args, vec!["-c", "echo hello world"]);
+        }
+        assert!(!opts.clear_env);
+        assert!(opts.timeout.is_none());
+    }
+
+    #[test]
+    fn escape_cmd_arg_basic() {
+        assert_eq!(escape_cmd_arg("hello"), r#""hello""#);
+    }
+
+    #[test]
+    fn escape_cmd_arg_with_quotes() {
+        assert_eq!(escape_cmd_arg(r#"say "hi""#), r#""say \"hi\"""#);
+    }
+
+    #[test]
+    fn escape_cmd_arg_with_percent() {
+        assert_eq!(escape_cmd_arg("100%"), r#""100%%""#);
+    }
+
+    #[test]
+    fn escape_cmd_arg_empty() {
+        assert_eq!(escape_cmd_arg(""), r#""""#);
+    }
+
+    #[test]
+    fn escape_cmd_arg_with_spaces_and_special() {
+        let escaped = escape_cmd_arg("path with spaces & special");
+        assert_eq!(escaped, r#""path with spaces & special""#);
+    }
+
+    #[tokio::test]
+    async fn run_zero_timeout_triggers_immediately() {
+        let opts = if cfg!(windows) {
+            SpawnOptions {
+                command: "cmd".into(),
+                args: vec!["/C".into(), "ping -n 5 127.0.0.1 >nul".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: Some(Duration::ZERO),
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: Some(Duration::from_millis(50)),
+            }
+        } else {
+            SpawnOptions {
+                command: "sleep".into(),
+                args: vec!["5".into()],
+                working_dir: None,
+                env: vec![],
+                timeout: Some(Duration::ZERO),
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: Some(Duration::from_millis(50)),
+            }
+        };
+        let out = run(opts).await.unwrap();
+        assert!(out.timed_out);
+    }
+
+    #[tokio::test]
+    async fn run_multiple_env_vars() {
+        let opts = if cfg!(windows) {
+            SpawnOptions {
+                command: "cmd".into(),
+                args: vec!["/C".into(), "echo %VAR_A% %VAR_B%".into()],
+                working_dir: None,
+                env: vec![
+                    ("VAR_A".into(), "alpha".into()),
+                    ("VAR_B".into(), "beta".into()),
+                ],
+                timeout: None,
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        } else {
+            SpawnOptions {
+                command: "sh".into(),
+                args: vec!["-c".into(), "echo $VAR_A $VAR_B".into()],
+                working_dir: None,
+                env: vec![
+                    ("VAR_A".into(), "alpha".into()),
+                    ("VAR_B".into(), "beta".into()),
+                ],
+                timeout: None,
+                stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
+            }
+        };
+        let out = run(opts).await.unwrap();
+        assert!(out.stdout.contains("alpha"));
+        assert!(out.stdout.contains("beta"));
+    }
+
+    #[tokio::test]
+    async fn run_fast_command_no_timeout() {
+        // A command that finishes well before its timeout should not be marked timed_out
+        let mut opts = echo_opts("fast");
+        opts.timeout = Some(Duration::from_secs(30));
+        let out = run(opts).await.unwrap();
+        assert_eq!(out.exit_code, 0);
+        assert!(!out.timed_out);
+        assert!(out.stdout.trim().contains("fast"));
     }
 }

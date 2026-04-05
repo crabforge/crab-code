@@ -178,6 +178,8 @@ impl HookExecutor {
                 env,
                 timeout: Some(Duration::from_secs(hook.timeout_secs)),
                 stdin_data: None,
+                clear_env: false,
+                kill_grace_period: None,
             };
 
             match crab_process::spawn::run(opts).await {

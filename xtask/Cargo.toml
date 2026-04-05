@@ -5,3 +5,5 @@ edition = "2024"
 publish = false
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
+toml_edit = "0.25"

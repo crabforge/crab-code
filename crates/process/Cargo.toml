@@ -11,7 +11,11 @@ description = "Child process management for Crab Code"
 crab-common.workspace = true
 tokio.workspace = true
 sysinfo.workspace = true
+serde.workspace = true
 portable-pty = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [features]
 default = []
