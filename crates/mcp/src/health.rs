@@ -105,7 +105,7 @@ impl HealthChecker {
     #[must_use]
     pub fn is_check_due(&self) -> bool {
         self.last_check
-            .map_or(true, |t| t.elapsed() >= self.config.interval)
+            .is_none_or(|t| t.elapsed() >= self.config.interval)
     }
 
     /// Record a successful health probe with the observed latency.
@@ -323,7 +323,7 @@ impl Heartbeat {
     #[must_use]
     pub fn should_send(&self) -> bool {
         self.last_sent
-            .map_or(true, |t| t.elapsed() >= self.interval)
+            .is_none_or(|t| t.elapsed() >= self.interval)
     }
 
     /// Record that a heartbeat was sent.
@@ -345,15 +345,12 @@ impl Heartbeat {
     /// Whether the connection appears dead (no response within timeout).
     #[must_use]
     pub fn is_dead(&self) -> bool {
-        match self.last_sent {
-            None => false,
-            Some(sent) => {
-                let no_response = self
-                    .last_received
-                    .map_or(true, |recv| recv < sent);
-                no_response && sent.elapsed() >= self.timeout
-            }
-        }
+        self.last_sent.is_some_and(|sent| {
+            let no_response = self
+                .last_received
+                .is_none_or(|recv| recv < sent);
+            no_response && sent.elapsed() >= self.timeout
+        })
     }
 
     /// Number of consecutive missed heartbeats.

@@ -5,9 +5,12 @@ mod compliance_tests;
 pub mod connection_pool;
 pub mod discovery;
 pub mod health;
+pub mod logging;
 pub mod manager;
 pub mod protocol;
 pub mod resource;
+pub mod roots;
+pub mod sampling;
 pub mod server;
 pub mod sse_server;
 pub mod tool_chain;
@@ -28,7 +31,10 @@ pub use protocol::{
     ServerCapabilities, ServerInfo, ToolCallParams, ToolCallResult,
 };
 pub use health::{AutoReconnect, HealthChecker, HealthCheckerConfig, HealthStatus, Heartbeat, ReconnectConfig};
+pub use logging::{McpLogEntry, McpLogLevel, McpLogger};
 pub use resource::ResourceCache;
+pub use roots::{RootInfo, RootRegistry};
+pub use sampling::{SamplingHandler, SamplingRequest, SamplingResponse, StopReason};
 pub use server::{
     FileResourceHandler, McpServer, PromptHandler, ResourceHandler, SkillPromptHandler,
     ToolHandler, ToolRegistryHandler,
