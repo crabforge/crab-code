@@ -165,6 +165,7 @@ fn parse_steps(value: &Value) -> Vec<String> {
 
 /// Build a simple Markdown plan from a description and step list.
 fn build_plan_markdown(description: &str, steps: &[String]) -> String {
+    use std::fmt::Write as _;
     let title = if description.is_empty() {
         "Plan"
     } else {
@@ -172,7 +173,7 @@ fn build_plan_markdown(description: &str, steps: &[String]) -> String {
     };
     let mut md = format!("# {title}\n\n## Steps\n");
     for step in steps {
-        md.push_str(&format!("- [ ] {step}\n"));
+        let _ = writeln!(md, "- [ ] {step}");
     }
     md
 }

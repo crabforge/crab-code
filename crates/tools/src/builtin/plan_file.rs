@@ -213,11 +213,12 @@ pub fn parse_plan(markdown: &str) -> PlanFile {
 fn parse_step_line(line: &str) -> Option<PlanStep> {
     // Expected: "[x] description (files: a, b) (complexity: high)"
     let (status, rest) = if line.len() >= 3 && line.starts_with('[') {
-        line.find(']').map_or((PlanStepStatus::Pending, line), |close| {
-            let marker = &line[..=close];
-            let status = PlanStepStatus::from_marker(marker);
-            (status, line[close + 1..].trim())
-        })
+        line.find(']')
+            .map_or((PlanStepStatus::Pending, line), |close| {
+                let marker = &line[..=close];
+                let status = PlanStepStatus::from_marker(marker);
+                (status, line[close + 1..].trim())
+            })
     } else {
         (PlanStepStatus::Pending, line)
     };
