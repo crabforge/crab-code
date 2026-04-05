@@ -98,7 +98,9 @@ async fn parse_http_request(
 
     let parts: Vec<&str> = request_line.split_whitespace().collect();
     if parts.len() < 2 {
-        return Err(crab_common::Error::Other("invalid HTTP request line".into()));
+        return Err(crab_common::Error::Other(
+            "invalid HTTP request line".into(),
+        ));
     }
     let method = parts[0].to_string();
     let path = parts[1].to_string();
@@ -141,9 +143,10 @@ fn query_param<'a>(path: &'a str, key: &str) -> Option<&'a str> {
     let query = path.split('?').nth(1)?;
     for pair in query.split('&') {
         if let Some((k, v)) = pair.split_once('=')
-            && k == key {
-                return Some(v);
-            }
+            && k == key
+        {
+            return Some(v);
+        }
     }
     None
 }
@@ -160,14 +163,18 @@ async fn handle_connection<H: ToolHandler + 'static>(
     let (method, path, body) = parse_http_request(&mut reader).await?;
 
     match (method.as_str(), path.split('?').next().unwrap_or(&path)) {
-        ("GET", "/sse") => {
-            handle_sse_stream(reader.into_inner(), sessions, port).await
-        }
+        ("GET", "/sse") => handle_sse_stream(reader.into_inner(), sessions, port).await,
         ("POST", "/messages") => {
-            let session_id = query_param(&path, "session_id")
-                .unwrap_or("")
-                .to_string();
-            handle_post_message(reader.into_inner(), body, session_id, server, sessions, request_timeout).await
+            let session_id = query_param(&path, "session_id").unwrap_or("").to_string();
+            handle_post_message(
+                reader.into_inner(),
+                body,
+                session_id,
+                server,
+                sessions,
+                request_timeout,
+            )
+            .await
         }
         _ => {
             let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found";
@@ -279,7 +286,8 @@ async fn handle_post_message<H: ToolHandler + 'static>(
     };
 
     // Process with timeout
-    let Ok(resp) = tokio::time::timeout(request_timeout, server.handle_request_public(req)).await else {
+    let Ok(resp) = tokio::time::timeout(request_timeout, server.handle_request_public(req)).await
+    else {
         let timeout_resp = JsonRpcResponse {
             jsonrpc: "2.0".into(),
             id: 0,
@@ -422,10 +430,7 @@ mod tests {
             query_param("/messages?session_id=abc123&foo=bar", "foo"),
             Some("bar")
         );
-        assert_eq!(
-            query_param("/messages?session_id=abc123", "missing"),
-            None
-        );
+        assert_eq!(query_param("/messages?session_id=abc123", "missing"), None);
         assert_eq!(query_param("/messages", "session_id"), None);
     }
 
@@ -443,9 +448,7 @@ mod tests {
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();
 
-        let handle = tokio::spawn(async move {
-            run_sse(server, port, cancel_clone).await
-        });
+        let handle = tokio::spawn(async move { run_sse(server, port, cancel_clone).await });
 
         // Give server a moment to bind
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -635,7 +638,10 @@ mod tests {
         let mut post_stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
             .await
             .unwrap();
-        post_stream.write_all(post_request.as_bytes()).await.unwrap();
+        post_stream
+            .write_all(post_request.as_bytes())
+            .await
+            .unwrap();
 
         // Read POST response (202 Accepted)
         let mut post_buf = vec![0u8; 1024];
@@ -692,7 +698,11 @@ mod tests {
             }
         }
 
-        let server = Arc::new(McpServer::new("slow-server", "0.1.0", Arc::new(SlowHandler)));
+        let server = Arc::new(McpServer::new(
+            "slow-server",
+            "0.1.0",
+            Arc::new(SlowHandler),
+        ));
         let port = free_port().await;
         let cancel = CancellationToken::new();
         let cancel_clone = cancel.clone();

@@ -32,12 +32,11 @@ mod tests {
             &self,
             _name: &str,
             _arguments: serde_json::Value,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ToolCallResult> + Send + '_>> {
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ToolCallResult> + Send + '_>>
+        {
             Box::pin(async move {
                 ToolCallResult {
-                    content: vec![ToolResultContent::Text {
-                        text: "ok".into(),
-                    }],
+                    content: vec![ToolResultContent::Text { text: "ok".into() }],
                     is_error: false,
                 }
             })
