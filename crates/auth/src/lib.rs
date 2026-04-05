@@ -1,12 +1,15 @@
 pub mod api_key;
+pub mod audit;
 pub mod aws_iam;
 #[cfg(feature = "bedrock")]
 pub mod bedrock_auth;
 pub mod credential_chain;
 pub mod error;
 pub mod gcp_identity;
+pub mod key_derive;
 pub mod keychain;
 pub mod oauth;
+pub mod rotation;
 #[cfg(feature = "vertex")]
 pub mod vertex_auth;
 
