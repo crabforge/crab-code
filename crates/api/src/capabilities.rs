@@ -26,6 +26,14 @@ pub struct ModelCapabilities {
     pub max_output_tokens: u32,
     /// Maximum context window size in tokens.
     pub context_window: u32,
+    /// Whether the model supports image inputs (PDF pages rendered as images).
+    pub supports_images: bool,
+    /// Whether the model supports PDF file inputs natively.
+    pub supports_pdf: bool,
+    /// Whether the model supports computer use (mouse/keyboard control).
+    pub supports_computer_use: bool,
+    /// Whether the model supports prompt caching.
+    pub supports_caching: bool,
 }
 
 impl ModelCapabilities {
@@ -38,6 +46,7 @@ impl ModelCapabilities {
             s if s.contains("haiku") => (8_192, 200_000),
             _ => (4_096, 200_000),
         };
+        let supports_computer_use = model_id.contains("sonnet") || model_id.contains("opus");
         Self {
             model_id: model_id.to_string(),
             vision: true,
@@ -46,6 +55,10 @@ impl ModelCapabilities {
             streaming: true,
             max_output_tokens: max_output,
             context_window: context,
+            supports_images: true,
+            supports_pdf: true,
+            supports_caching: true,
+            supports_computer_use,
         }
     }
 
@@ -70,6 +83,10 @@ impl ModelCapabilities {
             streaming: true,
             max_output_tokens: max_output,
             context_window: context,
+            supports_images: vision,
+            supports_pdf: false,
+            supports_caching: false,
+            supports_computer_use: false,
         }
     }
 
@@ -84,8 +101,103 @@ impl ModelCapabilities {
             streaming: true,
             max_output_tokens: 4_096,
             context_window: 128_000,
+            supports_images: false,
+            supports_pdf: false,
+            supports_caching: false,
+            supports_computer_use: false,
         }
     }
+}
+
+/// A capability that was requested but not supported by the model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapabilityWarning {
+    /// Name of the unsupported capability.
+    pub capability: String,
+    /// Reason it is not available.
+    pub reason: String,
+}
+
+impl std::fmt::Display for CapabilityWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.capability, self.reason)
+    }
+}
+
+/// Capabilities after negotiation — what the model actually supports
+/// given what was requested.
+#[derive(Debug, Clone)]
+pub struct NegotiatedCapabilities {
+    /// The effective capabilities (trimmed to model support).
+    pub effective: ModelCapabilities,
+    /// Warnings for capabilities that were requested but not supported.
+    pub warnings: Vec<CapabilityWarning>,
+}
+
+impl NegotiatedCapabilities {
+    /// Whether any warnings were generated.
+    #[must_use]
+    pub fn has_warnings(&self) -> bool {
+        !self.warnings.is_empty()
+    }
+}
+
+/// Negotiate capabilities: trim requested features to what the model supports.
+///
+/// Returns `NegotiatedCapabilities` with the effective set and any warnings.
+#[must_use]
+pub fn negotiate_capabilities(
+    requested: &RequestedCapabilities,
+    model: &ModelCapabilities,
+) -> NegotiatedCapabilities {
+    let mut warnings = Vec::new();
+
+    if requested.images && !model.supports_images {
+        warnings.push(CapabilityWarning {
+            capability: "images".to_string(),
+            reason: format!("model {} does not support image inputs", model.model_id),
+        });
+    }
+    if requested.pdf && !model.supports_pdf {
+        warnings.push(CapabilityWarning {
+            capability: "pdf".to_string(),
+            reason: format!("model {} does not support PDF inputs", model.model_id),
+        });
+    }
+    if requested.computer_use && !model.supports_computer_use {
+        warnings.push(CapabilityWarning {
+            capability: "computer_use".to_string(),
+            reason: format!("model {} does not support computer use", model.model_id),
+        });
+    }
+    if requested.caching && !model.supports_caching {
+        warnings.push(CapabilityWarning {
+            capability: "caching".to_string(),
+            reason: format!("model {} does not support prompt caching", model.model_id),
+        });
+    }
+    if requested.tool_use && !model.tool_use {
+        warnings.push(CapabilityWarning {
+            capability: "tool_use".to_string(),
+            reason: format!("model {} does not support tool use", model.model_id),
+        });
+    }
+
+    NegotiatedCapabilities {
+        effective: model.clone(),
+        warnings,
+    }
+}
+
+/// What capabilities the caller requests.
+#[derive(Debug, Clone, Default)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct RequestedCapabilities {
+    pub images: bool,
+    pub pdf: bool,
+    pub computer_use: bool,
+    pub caching: bool,
+    pub tool_use: bool,
 }
 
 /// Accumulates token usage from streaming events.
@@ -466,5 +578,97 @@ mod tests {
         };
         assert!(!status.healthy);
         assert_eq!(status.error.as_deref(), Some("connection refused"));
+    }
+
+    // ─── New capability fields ───
+
+    #[test]
+    fn anthropic_sonnet_supports_computer_use() {
+        let caps = ModelCapabilities::anthropic("claude-sonnet-4-20250514");
+        assert!(caps.supports_images);
+        assert!(caps.supports_pdf);
+        assert!(caps.supports_caching);
+        assert!(caps.supports_computer_use);
+    }
+
+    #[test]
+    fn anthropic_haiku_no_computer_use() {
+        let caps = ModelCapabilities::anthropic("claude-haiku-3-5");
+        assert!(caps.supports_images);
+        assert!(!caps.supports_computer_use);
+    }
+
+    #[test]
+    fn openai_no_pdf_or_caching() {
+        let caps = ModelCapabilities::openai("gpt-4o");
+        assert!(caps.supports_images);
+        assert!(!caps.supports_pdf);
+        assert!(!caps.supports_caching);
+        assert!(!caps.supports_computer_use);
+    }
+
+    #[test]
+    fn unknown_no_extended_capabilities() {
+        let caps = ModelCapabilities::unknown("local-llama");
+        assert!(!caps.supports_images);
+        assert!(!caps.supports_pdf);
+        assert!(!caps.supports_caching);
+        assert!(!caps.supports_computer_use);
+    }
+
+    // ─── Capability negotiation ───
+
+    #[test]
+    fn negotiate_no_warnings_when_all_supported() {
+        let model = ModelCapabilities::anthropic("claude-sonnet-4-20250514");
+        let requested = RequestedCapabilities {
+            images: true,
+            pdf: true,
+            computer_use: true,
+            caching: true,
+            tool_use: true,
+        };
+        let result = negotiate_capabilities(&requested, &model);
+        assert!(!result.has_warnings());
+    }
+
+    #[test]
+    fn negotiate_warns_on_unsupported() {
+        let model = ModelCapabilities::openai("gpt-4o");
+        let requested = RequestedCapabilities {
+            images: true,
+            pdf: true,
+            computer_use: true,
+            caching: true,
+            tool_use: true,
+        };
+        let result = negotiate_capabilities(&requested, &model);
+        assert!(result.has_warnings());
+        let caps: Vec<&str> = result
+            .warnings
+            .iter()
+            .map(|w| w.capability.as_str())
+            .collect();
+        assert!(caps.contains(&"pdf"));
+        assert!(caps.contains(&"computer_use"));
+        assert!(caps.contains(&"caching"));
+        assert!(!caps.contains(&"images")); // gpt-4o supports images
+    }
+
+    #[test]
+    fn negotiate_no_warnings_when_nothing_requested() {
+        let model = ModelCapabilities::unknown("local");
+        let requested = RequestedCapabilities::default();
+        let result = negotiate_capabilities(&requested, &model);
+        assert!(!result.has_warnings());
+    }
+
+    #[test]
+    fn capability_warning_display() {
+        let w = CapabilityWarning {
+            capability: "pdf".to_string(),
+            reason: "not supported".to_string(),
+        };
+        assert_eq!(w.to_string(), "pdf: not supported");
     }
 }

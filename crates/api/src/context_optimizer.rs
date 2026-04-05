@@ -364,9 +364,17 @@ impl ContextWindowOptimizer {
     pub fn allocate(&self) -> BudgetAllocation {
         let input_budget = self.context_window.saturating_sub(self.output_reserved);
 
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
         let system_tokens = (input_budget as f32 * self.system_ratio) as u32;
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
         let tool_tokens = (input_budget as f32 * self.tool_ratio) as u32;
         let history_tokens = input_budget.saturating_sub(system_tokens + tool_tokens);
 
@@ -400,7 +408,9 @@ impl ContextWindowOptimizer {
         let per_tool_budget = if tool_results.is_empty() {
             0
         } else {
-            allocation.tool_tokens / tool_results.len() as u32
+            #[allow(clippy::cast_possible_truncation)]
+            let len = tool_results.len() as u32;
+            allocation.tool_tokens / len
         };
         let tools_out: Vec<String> = tool_results
             .iter()

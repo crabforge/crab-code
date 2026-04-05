@@ -21,7 +21,9 @@ pub mod rate_limit;
 pub mod response_cache;
 pub mod streaming;
 pub mod token_budget;
+pub mod token_limiter;
 pub mod types;
+pub mod usage_stats;
 
 #[cfg(feature = "bedrock")]
 pub mod bedrock;
