@@ -22,6 +22,7 @@ futures.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+crab-plugin.workspace = true
 
 [lints]
 workspace = true

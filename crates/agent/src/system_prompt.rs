@@ -287,4 +287,69 @@ mod tests {
         assert!(prompt.contains("> A test memory"));
         assert!(prompt.contains("Some project context."));
     }
+
+    #[test]
+    fn epoch_days_to_ymd_leap_year() {
+        // 2000-03-01 = 11017 days since epoch
+        let (y, m, d) = epoch_days_to_ymd(11017);
+        assert_eq!(y, 2000);
+        assert_eq!(m, 3);
+        assert_eq!(d, 1);
+    }
+
+    #[test]
+    fn epoch_days_to_ymd_end_of_year() {
+        // 2023-12-31 = 19722 days since epoch
+        let (y, m, d) = epoch_days_to_ymd(19722);
+        assert_eq!(y, 2023);
+        assert_eq!(m, 12);
+        assert_eq!(d, 31);
+    }
+
+    #[test]
+    fn build_system_prompt_with_crab_md() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("CRAB.md"),
+            "# Custom Project Rules\nBe helpful.",
+        )
+        .unwrap();
+
+        let registry = ToolRegistry::new();
+        let prompt = build_system_prompt(dir.path(), &registry, None);
+        assert!(prompt.contains("Custom Project Rules"));
+        assert!(prompt.contains("Be helpful."));
+        assert!(prompt.contains("Project Instructions"));
+    }
+
+    #[test]
+    fn build_system_prompt_empty_custom_instructions_omitted() {
+        let registry = ToolRegistry::new();
+        let prompt = build_system_prompt(Path::new("."), &registry, Some(""));
+        assert!(!prompt.contains("User Instructions"));
+    }
+
+    #[test]
+    fn append_memory_context_multiple() {
+        let mut prompt = String::new();
+        let memories = vec![
+            MemoryFile {
+                name: "A".into(),
+                description: "da".into(),
+                memory_type: "user".into(),
+                body: "ba".into(),
+                filename: "a.md".into(),
+            },
+            MemoryFile {
+                name: "B".into(),
+                description: "db".into(),
+                memory_type: "feedback".into(),
+                body: "bb".into(),
+                filename: "b.md".into(),
+            },
+        ];
+        append_memory_context(&mut prompt, &memories);
+        assert!(prompt.contains("## A (type: user)"));
+        assert!(prompt.contains("## B (type: feedback)"));
+    }
 }

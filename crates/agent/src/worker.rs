@@ -49,6 +49,23 @@ pub struct WorkerResult {
     pub conversation: Conversation,
 }
 
+impl WorkerResult {
+    /// Create a lightweight summary (clones everything except conversation).
+    ///
+    /// Used by the coordinator to keep a record of completed workers
+    /// without retaining the full conversation history in memory.
+    #[must_use]
+    pub fn clone_summary(&self) -> Self {
+        Self {
+            worker_id: self.worker_id.clone(),
+            output: self.output.clone(),
+            success: self.success,
+            usage: self.usage.clone(),
+            conversation: Conversation::new(self.worker_id.clone(), String::new(), 0),
+        }
+    }
+}
+
 /// Sub-agent worker that runs an independent query loop.
 ///
 /// Workers inherit the parent's `LlmBackend`, `ToolExecutor`, and `ToolContext`

@@ -1,6 +1,10 @@
 use std::borrow::Cow;
 
 use crab_api::LlmBackend;
+use crab_api::capabilities::StreamingUsage;
+use crab_api::rate_limit::RetryPolicy;
+use crab_api::streaming::StreamingToolParser;
+use crab_api::token_budget::TokenBudget;
 use crab_api::types::{CacheBreakpoint, MessageRequest, StreamEvent};
 use crab_core::event::Event;
 use crab_core::message::{ContentBlock, Message, Role};
@@ -22,6 +26,11 @@ pub struct QueryLoopConfig {
     pub tool_schemas: Vec<serde_json::Value>,
     /// Whether to enable prompt caching (Anthropic only).
     pub cache_enabled: bool,
+    /// Optional token budget for auto-calculating `max_tokens`.
+    /// When set, overrides the fixed `max_tokens` field.
+    pub token_budget: Option<TokenBudget>,
+    /// Retry policy for API requests. Uses default if `None`.
+    pub retry_policy: Option<RetryPolicy>,
 }
 
 /// Core agent loop: user input -> LLM SSE stream -> parse tool calls ->
@@ -38,6 +47,7 @@ pub async fn query_loop(
 ) -> crab_common::Result<()> {
     let mut turn_index: usize = 0;
     let context_mgr = ContextManager::default();
+    let retry_policy = config.retry_policy.clone().unwrap_or_default();
 
     loop {
         if cancel.is_cancelled() {
@@ -58,20 +68,30 @@ pub async fn query_loop(
             vec![]
         };
 
+        // Calculate max_tokens: use token budget if available, else fixed value
+        let max_tokens = config
+            .token_budget
+            .as_ref()
+            .map_or(config.max_tokens, |budget| {
+                #[allow(clippy::cast_possible_truncation)]
+                let input_tokens = conversation.estimated_tokens() as u32;
+                budget.calculate_max_tokens(input_tokens)
+            });
+
         // Build the API request from conversation state
         let req = MessageRequest {
             model: config.model.clone(),
             messages: Cow::Borrowed(conversation.messages()),
             system: Some(conversation.system_prompt.clone()),
-            max_tokens: config.max_tokens,
+            max_tokens,
             tools: config.tool_schemas.clone(),
             temperature: config.temperature,
             cache_breakpoints,
         };
 
-        // Stream the LLM response via SSE
+        // Stream the LLM response with retry support
         let (assistant_msg, total_usage, _stop_reason) =
-            stream_response(backend, req, &event_tx, &cancel).await?;
+            stream_with_retry(backend, req, &retry_policy, &event_tx, &cancel).await?;
 
         // Record usage
         conversation.record_usage(total_usage.clone());
@@ -98,7 +118,61 @@ pub async fn query_loop(
     }
 }
 
+/// Retry wrapper around `stream_response`. Retries on transient errors
+/// (connection, timeout, rate limit) using the provided `RetryPolicy`.
+async fn stream_with_retry(
+    backend: &LlmBackend,
+    req: MessageRequest<'_>,
+    policy: &RetryPolicy,
+    event_tx: &mpsc::Sender<Event>,
+    cancel: &CancellationToken,
+) -> crab_common::Result<(Message, TokenUsage, Option<String>)> {
+    let mut attempt = 0u32;
+    loop {
+        let req_clone = req.clone();
+        match stream_response(backend, req_clone, event_tx, cancel).await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                // Check if we should retry: only retry transient errors
+                // and only if we haven't exceeded the retry limit
+                let is_transient = is_transient_error(&e);
+                if is_transient && attempt < policy.max_retries {
+                    let delay = policy.delay_for_attempt(attempt);
+                    let _ = event_tx
+                        .send(Event::Error {
+                            message: format!(
+                                "Retrying after error (attempt {}/{}): {e}",
+                                attempt + 1,
+                                policy.max_retries
+                            ),
+                        })
+                        .await;
+                    tokio::time::sleep(delay).await;
+                    attempt += 1;
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+    }
+}
+
+/// Check if a `crab_common::Error` represents a transient/retryable condition.
+fn is_transient_error(err: &crab_common::Error) -> bool {
+    let msg = err.to_string().to_lowercase();
+    msg.contains("timeout")
+        || msg.contains("timed out")
+        || msg.contains("connection")
+        || msg.contains("rate limit")
+        || msg.contains("429")
+        || msg.contains("529")
+        || msg.contains("overloaded")
+}
+
 /// Stream an LLM response, assembling the assistant message from SSE events.
+///
+/// Uses `StreamingToolParser` for incremental `tool_use` block parsing and
+/// `StreamingUsage` for accurate token accumulation.
 ///
 /// Returns the assembled message, total usage, and stop reason.
 async fn stream_response(
@@ -109,10 +183,10 @@ async fn stream_response(
 ) -> crab_common::Result<(Message, TokenUsage, Option<String>)> {
     let mut stream = std::pin::pin!(backend.stream_message(req));
 
-    // Accumulators for building the assistant message
-    let mut content_blocks: Vec<ContentBlockAccum> = Vec::new();
-    let mut total_usage = TokenUsage::default();
-    let mut stop_reason: Option<String> = None;
+    // Use StreamingToolParser for incremental tool_use parsing
+    let mut tool_parser = StreamingToolParser::new();
+    // Use StreamingUsage for accurate token accumulation
+    let mut usage_tracker = StreamingUsage::new();
 
     while let Some(event) = stream.next().await {
         if cancel.is_cancelled() {
@@ -122,41 +196,28 @@ async fn stream_response(
         let event =
             event.map_err(|e| crab_common::Error::Other(format!("SSE stream error: {e}")))?;
 
-        match event {
-            StreamEvent::MessageStart { id, usage } => {
-                total_usage += usage;
-                let _ = event_tx.send(Event::MessageStart { id }).await;
-            }
-            StreamEvent::ContentBlockStart {
-                index,
-                content_type,
-            } => {
-                // Ensure we have enough slots
-                while content_blocks.len() <= index {
-                    content_blocks.push(ContentBlockAccum::new("text"));
-                }
-                content_blocks[index] = ContentBlockAccum::new(&content_type);
+        // Update usage tracker
+        usage_tracker.update(&event);
+
+        // Feed event to tool parser for incremental tool_use assembly
+        tool_parser.process(&event);
+
+        match &event {
+            StreamEvent::MessageStart { id, .. } => {
+                let _ = event_tx.send(Event::MessageStart { id: id.clone() }).await;
             }
             StreamEvent::ContentDelta { index, delta } => {
-                if let Some(block) = content_blocks.get_mut(index) {
-                    block.text.push_str(&delta);
-                }
-                let _ = event_tx.send(Event::ContentDelta { index, delta }).await;
+                let _ = event_tx
+                    .send(Event::ContentDelta {
+                        index: *index,
+                        delta: delta.clone(),
+                    })
+                    .await;
             }
             StreamEvent::ContentBlockStop { index } => {
-                let _ = event_tx.send(Event::ContentBlockStop { index }).await;
-            }
-            StreamEvent::MessageDelta {
-                usage,
-                stop_reason: reason,
-            } => {
-                total_usage += usage;
-                if reason.is_some() {
-                    stop_reason = reason;
-                }
-            }
-            StreamEvent::MessageStop => {
-                // Stream complete
+                let _ = event_tx
+                    .send(Event::ContentBlockStop { index: *index })
+                    .await;
             }
             StreamEvent::Error { message } => {
                 let _ = event_tx
@@ -168,64 +229,48 @@ async fn stream_response(
                     "SSE stream error: {message}"
                 )));
             }
+            StreamEvent::ContentBlockStart { .. }
+            | StreamEvent::MessageDelta { .. }
+            | StreamEvent::MessageStop => {}
         }
     }
 
-    // Assemble content blocks into a Message
-    let content: Vec<ContentBlock> = content_blocks
-        .into_iter()
-        .map(ContentBlockAccum::into_content_block)
-        .collect();
+    // Extract stop reason before consuming usage_tracker
+    let stop_reason = usage_tracker.stop_reason().map(String::from);
+
+    // Assemble content blocks into a Message using the tool parser
+    let mut content: Vec<ContentBlock> = Vec::new();
+
+    // Add text content if any
+    let text = tool_parser.text();
+    if !text.is_empty() {
+        content.push(ContentBlock::text(text));
+    }
+
+    // Add completed tool_use blocks from the streaming parser
+    for acc in tool_parser.completed_tools() {
+        content.push(ContentBlock::ToolUse {
+            id: acc.id.clone(),
+            name: acc.name.clone(),
+            input: acc.parse_input(),
+        });
+    }
+
+    // Add any in-progress tools that didn't get a ContentBlockStop
+    for acc in tool_parser.in_progress_tools() {
+        if let Some(input) = acc.try_parse_input() {
+            content.push(ContentBlock::ToolUse {
+                id: acc.id.clone(),
+                name: acc.name.clone(),
+                input,
+            });
+        }
+    }
 
     let message = Message::new(Role::Assistant, content);
+    let total_usage = usage_tracker.into_usage();
+
     Ok((message, total_usage, stop_reason))
-}
-
-/// Accumulator for building a content block from streaming deltas.
-struct ContentBlockAccum {
-    block_type: String,
-    text: String,
-}
-
-impl ContentBlockAccum {
-    fn new(block_type: &str) -> Self {
-        Self {
-            block_type: block_type.to_string(),
-            text: String::new(),
-        }
-    }
-
-    fn into_content_block(self) -> ContentBlock {
-        match self.block_type.as_str() {
-            "tool_use" => {
-                // Tool use blocks accumulate JSON in `text` field.
-                // The content_block_start should have provided id/name,
-                // but in the SSE protocol those come as separate fields.
-                // For now, parse the accumulated JSON as a tool_use block.
-                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&self.text) {
-                    let id = val
-                        .get("id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let name = val
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let input = val
-                        .get("input")
-                        .cloned()
-                        .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
-                    ContentBlock::ToolUse { id, name, input }
-                } else {
-                    // Fallback: treat as text
-                    ContentBlock::Text { text: self.text }
-                }
-            }
-            _ => ContentBlock::Text { text: self.text },
-        }
-    }
 }
 
 /// Check context usage and compact if needed.
@@ -560,9 +605,42 @@ mod tests {
             temperature: Some(0.7),
             tool_schemas: vec![],
             cache_enabled: false,
+            token_budget: None,
+            retry_policy: None,
         };
         assert_eq!(config.model.as_str(), "claude-sonnet-4-20250514");
         assert_eq!(config.max_tokens, 4096);
+    }
+
+    #[test]
+    fn query_loop_config_with_token_budget() {
+        let budget = TokenBudget::new(200_000, 16_000);
+        let config = QueryLoopConfig {
+            model: ModelId::from("claude-sonnet-4-20250514"),
+            max_tokens: 4096,
+            temperature: None,
+            tool_schemas: vec![],
+            cache_enabled: false,
+            token_budget: Some(budget),
+            retry_policy: None,
+        };
+        assert!(config.token_budget.is_some());
+    }
+
+    #[test]
+    fn query_loop_config_with_retry_policy() {
+        let policy = RetryPolicy::aggressive();
+        let config = QueryLoopConfig {
+            model: ModelId::from("claude-sonnet-4-20250514"),
+            max_tokens: 4096,
+            temperature: None,
+            tool_schemas: vec![],
+            cache_enabled: false,
+            token_budget: None,
+            retry_policy: Some(policy),
+        };
+        assert!(config.retry_policy.is_some());
+        assert_eq!(config.retry_policy.unwrap().max_retries, 5);
     }
 
     #[test]
@@ -606,5 +684,41 @@ mod tests {
         let msg = tool_results_message(results);
         assert_eq!(msg.role, Role::User);
         assert!(msg.content.is_empty());
+    }
+
+    #[test]
+    fn transient_error_timeout() {
+        let err = crab_common::Error::Other("request timed out".into());
+        assert!(is_transient_error(&err));
+    }
+
+    #[test]
+    fn transient_error_connection() {
+        let err = crab_common::Error::Other("connection refused".into());
+        assert!(is_transient_error(&err));
+    }
+
+    #[test]
+    fn transient_error_rate_limit() {
+        let err = crab_common::Error::Other("SSE stream error: rate limit exceeded 429".into());
+        assert!(is_transient_error(&err));
+    }
+
+    #[test]
+    fn transient_error_overloaded() {
+        let err = crab_common::Error::Other("server overloaded".into());
+        assert!(is_transient_error(&err));
+    }
+
+    #[test]
+    fn non_transient_error_json() {
+        let err = crab_common::Error::Other("invalid JSON".into());
+        assert!(!is_transient_error(&err));
+    }
+
+    #[test]
+    fn non_transient_error_auth() {
+        let err = crab_common::Error::Other("unauthorized: invalid API key".into());
+        assert!(!is_transient_error(&err));
     }
 }

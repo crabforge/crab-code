@@ -320,4 +320,119 @@ mod tests {
         let list = shared.lock().unwrap();
         assert_eq!(list.list().len(), 1);
     }
+
+    #[test]
+    fn default_task_list_is_empty() {
+        let list = TaskList::default();
+        assert!(list.list().is_empty());
+    }
+
+    #[test]
+    fn delete_nonexistent_returns_false() {
+        let mut list = TaskList::new();
+        assert!(!list.delete("999"));
+    }
+
+    #[test]
+    fn update_description() {
+        let mut list = TaskList::new();
+        let id = list.create("Task".into(), "old".into());
+        list.update(&id, None, None, Some("new desc".into()), None);
+        assert_eq!(list.get(&id).unwrap().description, "new desc");
+    }
+
+    #[test]
+    fn add_blocked_by_nonexistent_returns_false() {
+        let mut list = TaskList::new();
+        assert!(!list.add_blocked_by("999", "888"));
+    }
+
+    #[test]
+    fn add_blocked_by_duplicate_is_idempotent() {
+        let mut list = TaskList::new();
+        let id1 = list.create("A".into(), "".into());
+        let id2 = list.create("B".into(), "".into());
+        list.add_blocked_by(&id2, &id1);
+        list.add_blocked_by(&id2, &id1); // duplicate
+        let task = list.get(&id2).unwrap();
+        assert_eq!(task.blocked_by.len(), 1);
+    }
+
+    #[test]
+    fn task_serde_roundtrip() {
+        let task = Task {
+            id: "1".into(),
+            subject: "Test task".into(),
+            description: "A test".into(),
+            status: TaskStatus::InProgress,
+            owner: Some("alice".into()),
+            blocked_by: vec!["0".into()],
+            blocks: vec!["2".into()],
+        };
+        let json = serde_json::to_string(&task).unwrap();
+        let parsed: Task = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, "1");
+        assert_eq!(parsed.status, TaskStatus::InProgress);
+        assert_eq!(parsed.owner.as_deref(), Some("alice"));
+    }
+
+    #[test]
+    fn available_tasks_excludes_completed() {
+        let mut list = TaskList::new();
+        let id = list.create("Done".into(), "".into());
+        list.update(&id, Some(TaskStatus::Completed), None, None, None);
+        assert!(list.available_tasks().is_empty());
+    }
+
+    #[test]
+    fn available_tasks_excludes_in_progress() {
+        let mut list = TaskList::new();
+        let id = list.create("Working".into(), "".into());
+        list.update(&id, Some(TaskStatus::InProgress), None, None, None);
+        assert!(list.available_tasks().is_empty());
+    }
+
+    #[test]
+    fn multiple_dependencies() {
+        let mut list = TaskList::new();
+        let id1 = list.create("Dep 1".into(), "".into());
+        let id2 = list.create("Dep 2".into(), "".into());
+        let id3 = list.create("Blocked".into(), "".into());
+        list.add_blocked_by(&id3, &id1);
+        list.add_blocked_by(&id3, &id2);
+
+        // id3 should not be available (blocked by two)
+        assert!(list.available_tasks().iter().all(|t| t.id != id3));
+
+        // Complete one dependency
+        list.update(&id1, Some(TaskStatus::Completed), None, None, None);
+        assert!(list.available_tasks().iter().all(|t| t.id != id3));
+
+        // Complete both
+        list.update(&id2, Some(TaskStatus::Completed), None, None, None);
+        assert!(list.available_tasks().iter().any(|t| t.id == id3));
+    }
+
+    #[test]
+    fn get_mut_modifies_task() {
+        let mut list = TaskList::new();
+        let id = list.create("Mutable".into(), "".into());
+        let task = list.get_mut(&id).unwrap();
+        task.subject = "Modified".into();
+        assert_eq!(list.get(&id).unwrap().subject, "Modified");
+    }
+
+    #[test]
+    fn task_status_all_variants_serde() {
+        for status in [
+            TaskStatus::Pending,
+            TaskStatus::InProgress,
+            TaskStatus::Completed,
+            TaskStatus::Deleted,
+        ] {
+            let json = serde_json::to_string(&status).unwrap();
+            let parsed: TaskStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, status);
+        }
+    }
 }
