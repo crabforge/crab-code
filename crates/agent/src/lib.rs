@@ -1,6 +1,7 @@
 pub mod adaptive_prompt;
 pub mod assignment;
 pub mod code_nav;
+pub mod dialogue;
 pub mod conversation_tree;
 pub mod coordinator;
 pub mod error_recovery;
@@ -30,6 +31,10 @@ pub use assignment::{AssignmentStrategy, CapabilityBased, LeastLoaded, RoundRobi
 pub use code_nav::{
     CodeNavigator, Language, SymbolKind, SymbolLocation, detect_language, find_definitions,
     find_implementations, find_references, format_nav_results,
+};
+pub use dialogue::{
+    ConversationState, ConversationStateMachine, DialogueEvent, DialoguePolicy, PlannedAction,
+    TurnContext, TransitionResult, plan_next_turn,
 };
 pub use conversation_tree::{Branch, BranchError, BranchId, ConversationNode, ConversationTree};
 pub use coordinator::{AgentCoordinator, AgentHandle, AgentSession, SessionConfig};

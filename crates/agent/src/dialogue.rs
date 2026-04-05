@@ -185,37 +185,39 @@ fn next_state(state: ConversationState, event: DialogueEvent) -> Option<Conversa
     use DialogueEvent as E;
 
     match (state, event) {
-        // From Idle
-        (S::Idle, E::UserMessage) => Some(S::Querying),
-        (S::Idle, E::End) => Some(S::Finished),
+        // Transitions → Querying
+        (S::Idle, E::UserMessage)
+        | (S::WaitingUser, E::UserMessage)
+        | (S::ToolExecution, E::ToolExecutionDone) => Some(S::Querying),
 
-        // From Querying
-        (S::Querying, E::QuerySent) => Some(S::Querying), // still querying (streaming)
-        (S::Querying, E::TextResponse) => Some(S::Idle),
-        (S::Querying, E::ToolCallResponse) => Some(S::ToolExecution),
-        (S::Querying, E::Error) => Some(S::Idle),
+        // Transitions → Querying (self-loop while streaming)
+        (S::Querying, E::QuerySent) => Some(S::Querying),
 
-        // From ToolExecution
-        (S::ToolExecution, E::ToolExecutionDone) => Some(S::Querying),
+        // Transitions → Idle
+        (S::Querying, E::TextResponse)
+        | (S::Querying, E::Error)
+        | (S::ToolExecution, E::Error)
+        | (S::Summarizing, E::SummarizeDone)
+        | (S::Summarizing, E::Error) => Some(S::Idle),
+
+        // Transitions → ToolExecution
+        (S::Querying, E::ToolCallResponse) | (S::WaitingUser, E::UserConfirmation) => {
+            Some(S::ToolExecution)
+        }
+
+        // Transitions → WaitingUser
         (S::ToolExecution, E::UserConfirmation) => Some(S::WaitingUser),
-        (S::ToolExecution, E::Error) => Some(S::Idle),
 
-        // From WaitingUser
-        (S::WaitingUser, E::UserConfirmation) => Some(S::ToolExecution),
-        (S::WaitingUser, E::UserMessage) => Some(S::Querying),
-        (S::WaitingUser, E::End) => Some(S::Finished),
+        // Transitions → Finished
+        (S::Idle, E::End) | (S::WaitingUser, E::End) => Some(S::Finished),
+
+        // End from most states
+        (_, E::End) if state != S::Finished => Some(S::Finished),
 
         // From any state: summarize
         (_, E::SummarizeTriggered) if state != S::Finished && state != S::Summarizing => {
             Some(S::Summarizing)
         }
-
-        // From Summarizing
-        (S::Summarizing, E::SummarizeDone) => Some(S::Idle),
-        (S::Summarizing, E::Error) => Some(S::Idle),
-
-        // End from most states
-        (_, E::End) if state != S::Finished => Some(S::Finished),
 
         _ => None,
     }
@@ -321,7 +323,7 @@ pub fn plan_next_turn(ctx: &TurnContext, policy: &DialoguePolicy) -> PlannedActi
     // Check if we should confirm periodically
     if policy.confirm_every_n_turns > 0
         && ctx.turn > 0
-        && ctx.turn % policy.confirm_every_n_turns == 0
+        && ctx.turn.is_multiple_of(policy.confirm_every_n_turns)
     {
         return PlannedAction::RequestUserInput {
             prompt: format!("Turn {} complete. Continue?", ctx.turn),
