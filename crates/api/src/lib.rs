@@ -14,6 +14,7 @@ pub mod fallback;
 pub mod middleware;
 pub mod model_selector;
 pub mod openai;
+pub mod output_format;
 pub mod parallel;
 pub mod rate_limit;
 pub mod response_cache;
