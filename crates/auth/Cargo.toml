@@ -13,12 +13,15 @@ crab-config.workspace = true
 keyring.workspace = true
 oauth2.workspace = true
 reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
 [features]
 default = []
 bedrock = []
+vertex = []
 
 [lints]
 workspace = true

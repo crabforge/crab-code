@@ -1,10 +1,16 @@
 pub mod api_key;
+pub mod aws_iam;
 #[cfg(feature = "bedrock")]
 pub mod bedrock_auth;
+pub mod credential_chain;
 pub mod error;
+pub mod gcp_identity;
 pub mod keychain;
 pub mod oauth;
+#[cfg(feature = "vertex")]
+pub mod vertex_auth;
 
+pub use credential_chain::{CredentialChain, CredentialChainBuilder, build_default_chain};
 pub use error::AuthError;
 
 use std::future::Future;
