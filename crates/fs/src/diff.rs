@@ -124,6 +124,103 @@ pub fn unified_diff(old: &str, new: &str, old_label: &str, new_label: &str) -> S
         .to_string()
 }
 
+/// Generate a unified diff with a configurable number of context lines.
+#[must_use]
+pub fn unified_diff_with_context(
+    old: &str,
+    new: &str,
+    old_label: &str,
+    new_label: &str,
+    context_lines: usize,
+) -> String {
+    TextDiff::from_lines(old, new)
+        .unified_diff()
+        .context_radius(context_lines)
+        .header(old_label, new_label)
+        .to_string()
+}
+
+/// Inline (word-level) diff between two strings.
+///
+/// Returns a vector of `(tag, text)` pairs where tag is one of:
+/// - `"equal"` — unchanged text
+/// - `"delete"` — text only in old
+/// - `"insert"` — text only in new
+/// - `"replace"` — text changed from old to new
+#[must_use]
+pub fn inline_diff(old: &str, new: &str) -> Vec<InlineChange> {
+    let diff = TextDiff::from_words(old, new);
+    diff.iter_all_changes()
+        .map(|change| {
+            let tag = match change.tag() {
+                similar::ChangeTag::Equal => ChangeKind::Equal,
+                similar::ChangeTag::Delete => ChangeKind::Delete,
+                similar::ChangeTag::Insert => ChangeKind::Insert,
+            };
+            InlineChange {
+                kind: tag,
+                text: change.value().to_string(),
+            }
+        })
+        .collect()
+}
+
+/// Kind of inline change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeKind {
+    Equal,
+    Delete,
+    Insert,
+}
+
+impl std::fmt::Display for ChangeKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Equal => f.write_str("equal"),
+            Self::Delete => f.write_str("delete"),
+            Self::Insert => f.write_str("insert"),
+        }
+    }
+}
+
+/// A single inline change (word-level or character-level).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InlineChange {
+    pub kind: ChangeKind,
+    pub text: String,
+}
+
+/// Summary statistics for a diff.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiffStats {
+    pub lines_added: usize,
+    pub lines_removed: usize,
+    pub lines_unchanged: usize,
+}
+
+/// Compute diff statistics between two strings.
+#[must_use]
+pub fn diff_stats(old: &str, new: &str) -> DiffStats {
+    let diff = TextDiff::from_lines(old, new);
+    let mut added = 0;
+    let mut removed = 0;
+    let mut unchanged = 0;
+
+    for change in diff.iter_all_changes() {
+        match change.tag() {
+            similar::ChangeTag::Equal => unchanged += 1,
+            similar::ChangeTag::Delete => removed += 1,
+            similar::ChangeTag::Insert => added += 1,
+        }
+    }
+
+    DiffStats {
+        lines_added: added,
+        lines_removed: removed,
+        lines_unchanged: unchanged,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,5 +296,89 @@ mod tests {
         };
         let result = apply_edit(&opts).unwrap();
         assert!(result.unified_diff.contains("src/main.rs"));
+    }
+
+    // ── Enhanced diff tests ───────────────────────────────────────
+
+    #[test]
+    fn unified_diff_with_context_lines() {
+        let old = "a\nb\nc\nd\ne\nf\ng\n";
+        let new = "a\nb\nC\nd\ne\nf\ng\n";
+        let diff = unified_diff_with_context(old, new, "old", "new", 1);
+        assert!(diff.contains("-c"));
+        assert!(diff.contains("+C"));
+        // With context=1, should not include distant lines
+    }
+
+    #[test]
+    fn unified_diff_zero_context() {
+        let old = "a\nb\nc\n";
+        let new = "a\nB\nc\n";
+        let diff = unified_diff_with_context(old, new, "old", "new", 0);
+        assert!(diff.contains("-b"));
+        assert!(diff.contains("+B"));
+    }
+
+    #[test]
+    fn inline_diff_detects_word_changes() {
+        let old = "hello world";
+        let new = "hello rust";
+        let changes = inline_diff(old, new);
+        assert!(!changes.is_empty());
+
+        let has_equal = changes.iter().any(|c| c.kind == ChangeKind::Equal);
+        let has_change = changes
+            .iter()
+            .any(|c| c.kind == ChangeKind::Delete || c.kind == ChangeKind::Insert);
+        assert!(has_equal, "should have equal parts");
+        assert!(has_change, "should have changed parts");
+    }
+
+    #[test]
+    fn inline_diff_identical() {
+        let changes = inline_diff("same", "same");
+        assert!(changes.iter().all(|c| c.kind == ChangeKind::Equal));
+    }
+
+    #[test]
+    fn inline_diff_completely_different() {
+        let changes = inline_diff("old", "new");
+        let has_delete = changes.iter().any(|c| c.kind == ChangeKind::Delete);
+        let has_insert = changes.iter().any(|c| c.kind == ChangeKind::Insert);
+        assert!(has_delete);
+        assert!(has_insert);
+    }
+
+    #[test]
+    fn diff_stats_basic() {
+        let old = "a\nb\nc\n";
+        let new = "a\nB\nc\nd\n";
+        let stats = diff_stats(old, new);
+        assert_eq!(stats.lines_unchanged, 2); // "a\n" and "c\n"
+        assert_eq!(stats.lines_removed, 1); // "b\n"
+        assert_eq!(stats.lines_added, 2); // "B\n" and "d\n"
+    }
+
+    #[test]
+    fn diff_stats_identical() {
+        let text = "a\nb\nc\n";
+        let stats = diff_stats(text, text);
+        assert_eq!(stats.lines_added, 0);
+        assert_eq!(stats.lines_removed, 0);
+        assert_eq!(stats.lines_unchanged, 3);
+    }
+
+    #[test]
+    fn diff_stats_empty_to_content() {
+        let stats = diff_stats("", "new\n");
+        assert_eq!(stats.lines_added, 1);
+        assert_eq!(stats.lines_removed, 0);
+    }
+
+    #[test]
+    fn change_kind_display() {
+        assert_eq!(ChangeKind::Equal.to_string(), "equal");
+        assert_eq!(ChangeKind::Delete.to_string(), "delete");
+        assert_eq!(ChangeKind::Insert.to_string(), "insert");
     }
 }

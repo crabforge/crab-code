@@ -1,6 +1,11 @@
+pub mod content_cache;
 pub mod diff;
+pub mod filetype;
 pub mod gitignore;
 pub mod glob;
 pub mod grep;
+pub mod index;
 pub mod lock;
+pub mod symlink;
+pub mod template;
 pub mod watch;

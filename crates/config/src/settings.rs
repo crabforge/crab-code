@@ -96,17 +96,95 @@ pub fn load_project(project_dir: &Path) -> crab_common::Result<Settings> {
     load_from_file(&path)
 }
 
-/// Load and merge settings: global → project.
-/// Project-level values override global values.
+/// Load and merge settings with full priority chain:
+///
+/// `config.toml defaults → global settings.json → project settings.json → env vars`
+///
+/// Environment variables checked (highest priority):
+/// - `CRAB_API_PROVIDER` — override provider
+/// - `CRAB_API_KEY` — override API key
+/// - `CRAB_MODEL` — override model
+/// - `CRAB_API_BASE_URL` — override base URL
+///
+/// Provider-specific API key env vars (used when `CRAB_API_KEY` is not set):
+/// - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`
 pub fn load_merged_settings(project_dir: Option<&PathBuf>) -> crab_common::Result<Settings> {
+    load_merged_settings_with_env(project_dir, |k| std::env::var(k))
+}
+
+/// Inner merge implementation, parameterized over env var lookup for testability.
+///
+/// Merge chain: config.toml → global settings.json → project settings.json → env vars
+fn load_merged_settings_with_env<F>(
+    project_dir: Option<&PathBuf>,
+    env_lookup: F,
+) -> crab_common::Result<Settings>
+where
+    F: Fn(&str) -> std::result::Result<String, std::env::VarError>,
+{
+    // 1. config.toml defaults (lowest priority)
+    let config_toml = crate::config_toml::load_config_toml()?;
+    let base = crate::config_toml::config_toml_to_settings(&config_toml, None);
+
+    // 2. Global settings.json
     let global = load_global()?;
-    match project_dir {
+    let merged = base.merge(&global);
+
+    // 3. Project settings.json
+    let merged = match project_dir {
         Some(dir) => {
             let project = load_project(dir)?;
-            Ok(global.merge(&project))
+            merged.merge(&project)
         }
-        None => Ok(global),
+        None => merged,
+    };
+
+    // 4. Environment variable overrides (highest priority)
+    let env_overlay = build_env_overlay(&env_lookup, merged.api_provider.as_deref());
+    Ok(merged.merge(&env_overlay))
+}
+
+/// Build a `Settings` from environment variables.
+///
+/// Checks generic `CRAB_*` vars first, then falls back to provider-specific
+/// API key vars based on the current provider.
+fn build_env_overlay<F>(env_lookup: &F, current_provider: Option<&str>) -> Settings
+where
+    F: Fn(&str) -> std::result::Result<String, std::env::VarError>,
+{
+    let api_provider = env_lookup("CRAB_API_PROVIDER").ok();
+    let api_base_url = env_lookup("CRAB_API_BASE_URL").ok();
+    let model = env_lookup("CRAB_MODEL").ok();
+
+    // For API key: CRAB_API_KEY takes priority, then provider-specific vars
+    let api_key = env_lookup("CRAB_API_KEY").ok().or_else(|| {
+        let effective_provider = api_provider
+            .as_deref()
+            .or(current_provider)
+            .unwrap_or("anthropic");
+        provider_api_key_env(effective_provider, env_lookup)
+    });
+
+    Settings {
+        api_provider,
+        api_base_url,
+        api_key,
+        model,
+        ..Settings::default()
     }
+}
+
+/// Resolve a provider-specific API key from environment variables.
+fn provider_api_key_env<F>(provider: &str, env_lookup: &F) -> Option<String>
+where
+    F: Fn(&str) -> std::result::Result<String, std::env::VarError>,
+{
+    let var_name = match provider {
+        "deepseek" => "DEEPSEEK_API_KEY",
+        "openai" | "ollama" | "vllm" => "OPENAI_API_KEY",
+        _ => "ANTHROPIC_API_KEY",
+    };
+    env_lookup(var_name).ok().filter(|v| !v.is_empty())
 }
 
 #[cfg(test)]
@@ -384,6 +462,198 @@ mod tests {
         let result = load_merged_settings(Some(&dir)).unwrap();
         assert_eq!(result.model.as_deref(), Some("project-model"));
         assert_eq!(result.theme.as_deref(), Some("dark"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── Environment variable override tests ──────────────────────────────
+
+    use std::collections::HashMap;
+
+    /// Build a fake env lookup from a map.
+    fn fake_env(
+        map: HashMap<&'static str, &'static str>,
+    ) -> impl Fn(&str) -> std::result::Result<String, std::env::VarError> {
+        move |key: &str| {
+            map.get(key)
+                .map(|v| (*v).to_string())
+                .ok_or(std::env::VarError::NotPresent)
+        }
+    }
+
+    fn no_env(_key: &str) -> std::result::Result<String, std::env::VarError> {
+        Err(std::env::VarError::NotPresent)
+    }
+
+    #[test]
+    fn build_env_overlay_empty_when_no_vars() {
+        let overlay = build_env_overlay(&no_env, None);
+        assert!(overlay.api_provider.is_none());
+        assert!(overlay.api_key.is_none());
+        assert!(overlay.model.is_none());
+        assert!(overlay.api_base_url.is_none());
+    }
+
+    #[test]
+    fn build_env_overlay_crab_vars() {
+        let env = fake_env(HashMap::from([
+            ("CRAB_API_PROVIDER", "openai"),
+            ("CRAB_API_KEY", "sk-env-key"),
+            ("CRAB_MODEL", "gpt-4o"),
+            ("CRAB_API_BASE_URL", "http://localhost:8080"),
+        ]));
+        let overlay = build_env_overlay(&env, None);
+        assert_eq!(overlay.api_provider.as_deref(), Some("openai"));
+        assert_eq!(overlay.api_key.as_deref(), Some("sk-env-key"));
+        assert_eq!(overlay.model.as_deref(), Some("gpt-4o"));
+        assert_eq!(
+            overlay.api_base_url.as_deref(),
+            Some("http://localhost:8080")
+        );
+    }
+
+    #[test]
+    fn build_env_overlay_provider_specific_api_key() {
+        // No CRAB_API_KEY, but ANTHROPIC_API_KEY is set
+        let env = fake_env(HashMap::from([("ANTHROPIC_API_KEY", "ant-key")]));
+        let overlay = build_env_overlay(&env, Some("anthropic"));
+        assert_eq!(overlay.api_key.as_deref(), Some("ant-key"));
+    }
+
+    #[test]
+    fn build_env_overlay_crab_api_key_overrides_provider_key() {
+        let env = fake_env(HashMap::from([
+            ("CRAB_API_KEY", "crab-key"),
+            ("ANTHROPIC_API_KEY", "ant-key"),
+        ]));
+        let overlay = build_env_overlay(&env, Some("anthropic"));
+        assert_eq!(overlay.api_key.as_deref(), Some("crab-key"));
+    }
+
+    #[test]
+    fn build_env_overlay_openai_provider_key() {
+        let env = fake_env(HashMap::from([("OPENAI_API_KEY", "oai-key")]));
+        let overlay = build_env_overlay(&env, Some("openai"));
+        assert_eq!(overlay.api_key.as_deref(), Some("oai-key"));
+    }
+
+    #[test]
+    fn build_env_overlay_deepseek_provider_key() {
+        let env = fake_env(HashMap::from([("DEEPSEEK_API_KEY", "ds-key")]));
+        let overlay = build_env_overlay(&env, Some("deepseek"));
+        assert_eq!(overlay.api_key.as_deref(), Some("ds-key"));
+    }
+
+    #[test]
+    fn build_env_overlay_empty_provider_key_is_skipped() {
+        let env = fake_env(HashMap::from([("ANTHROPIC_API_KEY", "")]));
+        let overlay = build_env_overlay(&env, Some("anthropic"));
+        assert!(overlay.api_key.is_none());
+    }
+
+    #[test]
+    fn build_env_overlay_provider_from_env_affects_key_lookup() {
+        // CRAB_API_PROVIDER=openai, no CRAB_API_KEY, OPENAI_API_KEY set
+        let env = fake_env(HashMap::from([
+            ("CRAB_API_PROVIDER", "openai"),
+            ("OPENAI_API_KEY", "oai-from-env"),
+        ]));
+        let overlay = build_env_overlay(&env, Some("anthropic"));
+        // Should use openai key because CRAB_API_PROVIDER overrides current_provider
+        assert_eq!(overlay.api_key.as_deref(), Some("oai-from-env"));
+    }
+
+    #[test]
+    fn provider_api_key_env_routing() {
+        let env = fake_env(HashMap::from([
+            ("ANTHROPIC_API_KEY", "ant"),
+            ("OPENAI_API_KEY", "oai"),
+            ("DEEPSEEK_API_KEY", "ds"),
+        ]));
+        assert_eq!(provider_api_key_env("anthropic", &env), Some("ant".into()));
+        assert_eq!(provider_api_key_env("openai", &env), Some("oai".into()));
+        assert_eq!(provider_api_key_env("deepseek", &env), Some("ds".into()));
+        assert_eq!(provider_api_key_env("ollama", &env), Some("oai".into()));
+        assert_eq!(provider_api_key_env("vllm", &env), Some("oai".into()));
+        assert_eq!(provider_api_key_env("unknown", &env), Some("ant".into()));
+    }
+
+    #[test]
+    fn load_merged_env_overrides_project() {
+        // Set up a project with model = "project-model"
+        let dir = std::env::temp_dir().join("crab-config-test-env-override");
+        let crab_dir = dir.join(".crab");
+        let _ = std::fs::create_dir_all(&crab_dir);
+        std::fs::write(
+            crab_dir.join("settings.json"),
+            r#"{"model": "project-model", "apiKey": "project-key"}"#,
+        )
+        .unwrap();
+
+        // Env vars should override project settings
+        let env = fake_env(HashMap::from([
+            ("CRAB_MODEL", "env-model"),
+            ("CRAB_API_KEY", "env-key"),
+        ]));
+
+        let result = load_merged_settings_with_env(Some(&dir), env).unwrap();
+        assert_eq!(result.model.as_deref(), Some("env-model")); // env wins
+        assert_eq!(result.api_key.as_deref(), Some("env-key")); // env wins
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_merged_no_env_preserves_settings() {
+        let dir = std::env::temp_dir().join("crab-config-test-no-env");
+        let crab_dir = dir.join(".crab");
+        let _ = std::fs::create_dir_all(&crab_dir);
+        std::fs::write(
+            crab_dir.join("settings.json"),
+            r#"{"model": "project-model", "theme": "dark"}"#,
+        )
+        .unwrap();
+
+        let result = load_merged_settings_with_env(Some(&dir), no_env).unwrap();
+        assert_eq!(result.model.as_deref(), Some("project-model"));
+        assert_eq!(result.theme.as_deref(), Some("dark"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn full_merge_priority_chain() {
+        // This test verifies the complete priority chain:
+        // config.toml < global settings.json < project settings.json < env vars
+        //
+        // We can only control project settings + env vars in tests
+        // (global settings.json and config.toml depend on user's home dir),
+        // but we verify that env vars override project settings.
+        let dir = std::env::temp_dir().join("crab-config-test-full-chain");
+        let crab_dir = dir.join(".crab");
+        let _ = std::fs::create_dir_all(&crab_dir);
+        std::fs::write(
+            crab_dir.join("settings.json"),
+            r#"{
+                "apiProvider": "anthropic",
+                "model": "project-model",
+                "apiKey": "project-key",
+                "theme": "dark"
+            }"#,
+        )
+        .unwrap();
+
+        // Env overrides only model and provider — key and theme come from project
+        let env = fake_env(HashMap::from([
+            ("CRAB_API_PROVIDER", "openai"),
+            ("CRAB_MODEL", "env-model"),
+        ]));
+
+        let result = load_merged_settings_with_env(Some(&dir), env).unwrap();
+        assert_eq!(result.api_provider.as_deref(), Some("openai")); // env wins
+        assert_eq!(result.model.as_deref(), Some("env-model")); // env wins
+        assert_eq!(result.api_key.as_deref(), Some("project-key")); // project preserved
+        assert_eq!(result.theme.as_deref(), Some("dark")); // project preserved
 
         let _ = std::fs::remove_dir_all(&dir);
     }

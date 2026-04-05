@@ -12,7 +12,10 @@ crab-common.workspace = true
 globset.workspace = true
 ignore.workspace = true
 notify.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 similar.workspace = true
+toml.workspace = true
 fd-lock.workspace = true
 regex.workspace = true
 

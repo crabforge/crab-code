@@ -9,6 +9,8 @@ description = "Observability and telemetry for Crab Code"
 
 [dependencies]
 crab-common.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true

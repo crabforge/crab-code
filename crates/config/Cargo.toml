@@ -12,6 +12,8 @@ crab-common.workspace = true
 crab-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true
+toml.workspace = true
 jsonc-parser.workspace = true
 directories.workspace = true
 
