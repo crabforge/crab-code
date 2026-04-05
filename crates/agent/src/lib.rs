@@ -37,11 +37,11 @@ pub use error_recovery::{
     CircuitBreaker, CircuitBreakerConfig, CircuitState, DegradableFeature, ErrorCategory,
     ErrorClassifier, FeaturePriority, GracefulDegradation, RecoveryAction, RecoveryStrategy,
 };
+pub use health::{HealthConfig, HealthMonitor, HealthStatus};
 pub use memory_retriever::{
     MemoryRanker, RankedMemory, RetrieverConfig, format_retrieved_memories, retrieve_for_context,
     retrieve_memories,
 };
-pub use health::{HealthConfig, HealthMonitor, HealthStatus};
 pub use message_bus::{AgentMessage, AgentStatus, Envelope, event_channel};
 pub use message_router::MessageRouter;
 pub use metrics::{AgentMetrics, MetricsCollector};
@@ -52,14 +52,13 @@ pub use project_context::{
 pub use query_loop::{QueryLoopConfig, StreamingToolExecutor, query_loop};
 pub use repl_commands::{CommandResult, ReplCommand, execute_command};
 pub use retry::{RetryDecision, RetryPolicy, RetryTracker};
-pub use summarizer::{
-    ConversationSummary, SummarizerConfig, SummaryItem, SummaryItemKind,
-    summarize_conversation,
-};
 pub use smart_context::{
     ContextConfig, ContextSnippet, ContextUsageTracker, QueryTerms, RelevantFile,
     build_context_snippets_from_content, extract_query_terms, format_context_section,
     score_file_relevance, smart_context_for_query,
+};
+pub use summarizer::{
+    ConversationSummary, SummarizerConfig, SummaryItem, SummaryItemKind, summarize_conversation,
 };
 pub use system_prompt::{build_system_prompt, build_system_prompt_with_memories};
 pub use task::{SharedTaskList, Task, TaskList, TaskStatus, shared_task_list};

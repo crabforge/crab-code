@@ -144,8 +144,16 @@ pub enum RecoveryAction {
 impl std::fmt::Display for RecoveryAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Retry { delay, max_attempts } => {
-                write!(f, "retry (delay: {}ms, max: {})", delay.as_millis(), max_attempts)
+            Self::Retry {
+                delay,
+                max_attempts,
+            } => {
+                write!(
+                    f,
+                    "retry (delay: {}ms, max: {})",
+                    delay.as_millis(),
+                    max_attempts
+                )
             }
             Self::Fallback { reason } => write!(f, "fallback: {reason}"),
             Self::Abort { reason } => write!(f, "abort: {reason}"),
@@ -230,7 +238,8 @@ impl RecoveryStrategy {
                     // Escalate: retries exhausted
                     match category {
                         ErrorCategory::RateLimit => RecoveryAction::AskUser {
-                            message: "Rate limit persists after retries. Wait or check quota.".into(),
+                            message: "Rate limit persists after retries. Wait or check quota."
+                                .into(),
                         },
                         ErrorCategory::Timeout => RecoveryAction::Fallback {
                             reason: "Timeout persists — trying simpler request.".into(),
@@ -475,12 +484,27 @@ impl GracefulDegradation {
     #[must_use]
     pub fn new() -> Self {
         let mut features = HashMap::new();
-        features.insert(DegradableFeature::SmartContext, (FeaturePriority::LOW, true));
-        features.insert(DegradableFeature::MemoryRetrieval, (FeaturePriority::MEDIUM, true));
-        features.insert(DegradableFeature::CodeNavigation, (FeaturePriority::LOW, true));
+        features.insert(
+            DegradableFeature::SmartContext,
+            (FeaturePriority::LOW, true),
+        );
+        features.insert(
+            DegradableFeature::MemoryRetrieval,
+            (FeaturePriority::MEDIUM, true),
+        );
+        features.insert(
+            DegradableFeature::CodeNavigation,
+            (FeaturePriority::LOW, true),
+        );
         features.insert(DegradableFeature::Streaming, (FeaturePriority::HIGH, true));
-        features.insert(DegradableFeature::MultiAgent, (FeaturePriority::MEDIUM, true));
-        features.insert(DegradableFeature::ToolExecution, (FeaturePriority::CORE, true));
+        features.insert(
+            DegradableFeature::MultiAgent,
+            (FeaturePriority::MEDIUM, true),
+        );
+        features.insert(
+            DegradableFeature::ToolExecution,
+            (FeaturePriority::CORE, true),
+        );
 
         Self {
             features,
@@ -633,60 +657,141 @@ mod tests {
 
     #[test]
     fn classify_rate_limit() {
-        assert_eq!(ErrorClassifier::classify("Rate limit exceeded"), ErrorCategory::RateLimit);
-        assert_eq!(ErrorClassifier::classify("HTTP 429 Too Many Requests"), ErrorCategory::RateLimit);
-        assert_eq!(ErrorClassifier::classify("Quota exceeded for model"), ErrorCategory::RateLimit);
+        assert_eq!(
+            ErrorClassifier::classify("Rate limit exceeded"),
+            ErrorCategory::RateLimit
+        );
+        assert_eq!(
+            ErrorClassifier::classify("HTTP 429 Too Many Requests"),
+            ErrorCategory::RateLimit
+        );
+        assert_eq!(
+            ErrorClassifier::classify("Quota exceeded for model"),
+            ErrorCategory::RateLimit
+        );
     }
 
     #[test]
     fn classify_auth() {
-        assert_eq!(ErrorClassifier::classify("401 Unauthorized"), ErrorCategory::Auth);
-        assert_eq!(ErrorClassifier::classify("403 Forbidden"), ErrorCategory::Auth);
-        assert_eq!(ErrorClassifier::classify("Invalid API key provided"), ErrorCategory::Auth);
-        assert_eq!(ErrorClassifier::classify("Permission denied"), ErrorCategory::Auth);
+        assert_eq!(
+            ErrorClassifier::classify("401 Unauthorized"),
+            ErrorCategory::Auth
+        );
+        assert_eq!(
+            ErrorClassifier::classify("403 Forbidden"),
+            ErrorCategory::Auth
+        );
+        assert_eq!(
+            ErrorClassifier::classify("Invalid API key provided"),
+            ErrorCategory::Auth
+        );
+        assert_eq!(
+            ErrorClassifier::classify("Permission denied"),
+            ErrorCategory::Auth
+        );
     }
 
     #[test]
     fn classify_timeout() {
-        assert_eq!(ErrorClassifier::classify("Request timeout"), ErrorCategory::Timeout);
-        assert_eq!(ErrorClassifier::classify("Connection timed out"), ErrorCategory::Timeout);
-        assert_eq!(ErrorClassifier::classify("Deadline exceeded"), ErrorCategory::Timeout);
+        assert_eq!(
+            ErrorClassifier::classify("Request timeout"),
+            ErrorCategory::Timeout
+        );
+        assert_eq!(
+            ErrorClassifier::classify("Connection timed out"),
+            ErrorCategory::Timeout
+        );
+        assert_eq!(
+            ErrorClassifier::classify("Deadline exceeded"),
+            ErrorCategory::Timeout
+        );
     }
 
     #[test]
     fn classify_permanent() {
-        assert_eq!(ErrorClassifier::classify("404 Not Found"), ErrorCategory::Permanent);
-        assert_eq!(ErrorClassifier::classify("Invalid request body"), ErrorCategory::Permanent);
-        assert_eq!(ErrorClassifier::classify("400 Bad Request"), ErrorCategory::Permanent);
-        assert_eq!(ErrorClassifier::classify("Malformed JSON input"), ErrorCategory::Permanent);
+        assert_eq!(
+            ErrorClassifier::classify("404 Not Found"),
+            ErrorCategory::Permanent
+        );
+        assert_eq!(
+            ErrorClassifier::classify("Invalid request body"),
+            ErrorCategory::Permanent
+        );
+        assert_eq!(
+            ErrorClassifier::classify("400 Bad Request"),
+            ErrorCategory::Permanent
+        );
+        assert_eq!(
+            ErrorClassifier::classify("Malformed JSON input"),
+            ErrorCategory::Permanent
+        );
     }
 
     #[test]
     fn classify_transient() {
-        assert_eq!(ErrorClassifier::classify("500 Internal Server Error"), ErrorCategory::Transient);
-        assert_eq!(ErrorClassifier::classify("503 Service Unavailable"), ErrorCategory::Transient);
-        assert_eq!(ErrorClassifier::classify("Connection refused"), ErrorCategory::Transient);
-        assert_eq!(ErrorClassifier::classify("Connection reset by peer"), ErrorCategory::Transient);
+        assert_eq!(
+            ErrorClassifier::classify("500 Internal Server Error"),
+            ErrorCategory::Transient
+        );
+        assert_eq!(
+            ErrorClassifier::classify("503 Service Unavailable"),
+            ErrorCategory::Transient
+        );
+        assert_eq!(
+            ErrorClassifier::classify("Connection refused"),
+            ErrorCategory::Transient
+        );
+        assert_eq!(
+            ErrorClassifier::classify("Connection reset by peer"),
+            ErrorCategory::Transient
+        );
     }
 
     #[test]
     fn classify_unknown() {
-        assert_eq!(ErrorClassifier::classify("Something went wrong"), ErrorCategory::Unknown);
+        assert_eq!(
+            ErrorClassifier::classify("Something went wrong"),
+            ErrorCategory::Unknown
+        );
         assert_eq!(ErrorClassifier::classify(""), ErrorCategory::Unknown);
     }
 
     #[test]
     fn classify_status_codes() {
-        assert_eq!(ErrorClassifier::classify_status(429), ErrorCategory::RateLimit);
+        assert_eq!(
+            ErrorClassifier::classify_status(429),
+            ErrorCategory::RateLimit
+        );
         assert_eq!(ErrorClassifier::classify_status(401), ErrorCategory::Auth);
         assert_eq!(ErrorClassifier::classify_status(403), ErrorCategory::Auth);
-        assert_eq!(ErrorClassifier::classify_status(408), ErrorCategory::Timeout);
-        assert_eq!(ErrorClassifier::classify_status(504), ErrorCategory::Timeout);
-        assert_eq!(ErrorClassifier::classify_status(400), ErrorCategory::Permanent);
-        assert_eq!(ErrorClassifier::classify_status(404), ErrorCategory::Permanent);
-        assert_eq!(ErrorClassifier::classify_status(500), ErrorCategory::Transient);
-        assert_eq!(ErrorClassifier::classify_status(503), ErrorCategory::Transient);
-        assert_eq!(ErrorClassifier::classify_status(418), ErrorCategory::Unknown);
+        assert_eq!(
+            ErrorClassifier::classify_status(408),
+            ErrorCategory::Timeout
+        );
+        assert_eq!(
+            ErrorClassifier::classify_status(504),
+            ErrorCategory::Timeout
+        );
+        assert_eq!(
+            ErrorClassifier::classify_status(400),
+            ErrorCategory::Permanent
+        );
+        assert_eq!(
+            ErrorClassifier::classify_status(404),
+            ErrorCategory::Permanent
+        );
+        assert_eq!(
+            ErrorClassifier::classify_status(500),
+            ErrorCategory::Transient
+        );
+        assert_eq!(
+            ErrorClassifier::classify_status(503),
+            ErrorCategory::Transient
+        );
+        assert_eq!(
+            ErrorClassifier::classify_status(418),
+            ErrorCategory::Unknown
+        );
     }
 
     // ── RecoveryAction ─────────────────────────────────────────────
@@ -699,13 +804,19 @@ mod tests {
         };
         assert!(retry.to_string().contains("retry"));
 
-        let fallback = RecoveryAction::Fallback { reason: "test".into() };
+        let fallback = RecoveryAction::Fallback {
+            reason: "test".into(),
+        };
         assert!(fallback.to_string().contains("fallback"));
 
-        let abort = RecoveryAction::Abort { reason: "fatal".into() };
+        let abort = RecoveryAction::Abort {
+            reason: "fatal".into(),
+        };
         assert!(abort.to_string().contains("abort"));
 
-        let ask = RecoveryAction::AskUser { message: "help".into() };
+        let ask = RecoveryAction::AskUser {
+            message: "help".into(),
+        };
         assert!(ask.to_string().contains("ask user"));
     }
 
@@ -925,7 +1036,10 @@ mod tests {
     #[test]
     fn degradable_feature_display() {
         assert_eq!(DegradableFeature::SmartContext.to_string(), "smart_context");
-        assert_eq!(DegradableFeature::ToolExecution.to_string(), "tool_execution");
+        assert_eq!(
+            DegradableFeature::ToolExecution.to_string(),
+            "tool_execution"
+        );
         assert_eq!(DegradableFeature::Streaming.to_string(), "streaming");
     }
 

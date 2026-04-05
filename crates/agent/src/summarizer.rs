@@ -199,15 +199,17 @@ pub fn summarize_conversation(
             turn += 1;
 
             // Extract topics from user messages
-            if config.include_topics && topic_count < config.max_items_per_kind
-                && let Some(topic) = extract_topic(msg) {
-                    items.push(SummaryItem {
-                        kind: SummaryItemKind::Topic,
-                        content: topic,
-                        turn,
-                    });
-                    topic_count += 1;
-                }
+            if config.include_topics
+                && topic_count < config.max_items_per_kind
+                && let Some(topic) = extract_topic(msg)
+            {
+                items.push(SummaryItem {
+                    kind: SummaryItemKind::Topic,
+                    content: topic,
+                    turn,
+                });
+                topic_count += 1;
+            }
 
             // Check for unresolved issues in user messages
             if issue_count < config.max_items_per_kind {
@@ -326,20 +328,29 @@ fn extract_code_changes(msg: &Message) -> Vec<String> {
         if let ContentBlock::ToolUse { name, input, .. } = block {
             match name.as_str() {
                 "write" | "write_file" => {
-                    if let Some(path) = input.get("file_path").or_else(|| input.get("path")).and_then(|v| v.as_str()) {
+                    if let Some(path) = input
+                        .get("file_path")
+                        .or_else(|| input.get("path"))
+                        .and_then(|v| v.as_str())
+                    {
                         changes.push(format!("Wrote file: {path}"));
                     }
                 }
                 "edit" | "edit_file" => {
-                    if let Some(path) = input.get("file_path").or_else(|| input.get("path")).and_then(|v| v.as_str()) {
+                    if let Some(path) = input
+                        .get("file_path")
+                        .or_else(|| input.get("path"))
+                        .and_then(|v| v.as_str())
+                    {
                         changes.push(format!("Edited file: {path}"));
                     }
                 }
                 "bash" => {
                     if let Some(cmd) = input.get("command").and_then(|v| v.as_str())
-                        && (cmd.starts_with("git commit") || cmd.starts_with("git add")) {
-                            changes.push(format!("Git operation: {}", truncate_line(cmd, 80)));
-                        }
+                        && (cmd.starts_with("git commit") || cmd.starts_with("git add"))
+                    {
+                        changes.push(format!("Git operation: {}", truncate_line(cmd, 80)));
+                    }
                 }
                 _ => {}
             }
@@ -354,22 +365,23 @@ fn extract_tool_actions(msg: &Message) -> Vec<String> {
     for block in &msg.content {
         if let ContentBlock::ToolUse { name, input, .. } = block {
             let detail = match name.as_str() {
-                "read" | "read_file" => {
-                    input.get("file_path").or_else(|| input.get("path")).and_then(|v| v.as_str())
-                        .map(|p| format!("Read: {p}"))
-                }
-                "glob" => {
-                    input.get("pattern").and_then(|v| v.as_str())
-                        .map(|p| format!("Glob: {p}"))
-                }
-                "grep" => {
-                    input.get("pattern").and_then(|v| v.as_str())
-                        .map(|p| format!("Grep: {}", truncate_line(p, 60)))
-                }
-                "bash" => {
-                    input.get("command").and_then(|v| v.as_str())
-                        .map(|c| format!("Bash: {}", truncate_line(c, 60)))
-                }
+                "read" | "read_file" => input
+                    .get("file_path")
+                    .or_else(|| input.get("path"))
+                    .and_then(|v| v.as_str())
+                    .map(|p| format!("Read: {p}")),
+                "glob" => input
+                    .get("pattern")
+                    .and_then(|v| v.as_str())
+                    .map(|p| format!("Glob: {p}")),
+                "grep" => input
+                    .get("pattern")
+                    .and_then(|v| v.as_str())
+                    .map(|p| format!("Grep: {}", truncate_line(p, 60))),
+                "bash" => input
+                    .get("command")
+                    .and_then(|v| v.as_str())
+                    .map(|c| format!("Bash: {}", truncate_line(c, 60))),
                 _ => Some(format!("Tool: {name}")),
             };
             if let Some(d) = detail {
@@ -550,10 +562,7 @@ mod tests {
 
     #[test]
     fn extract_no_change_for_read() {
-        let msg = assistant_with_tool(
-            "read",
-            serde_json::json!({"file_path": "src/main.rs"}),
-        );
+        let msg = assistant_with_tool("read", serde_json::json!({"file_path": "src/main.rs"}));
         let changes = extract_code_changes(&msg);
         assert!(changes.is_empty());
     }
@@ -562,10 +571,7 @@ mod tests {
 
     #[test]
     fn extract_read_action() {
-        let msg = assistant_with_tool(
-            "read",
-            serde_json::json!({"file_path": "src/lib.rs"}),
-        );
+        let msg = assistant_with_tool("read", serde_json::json!({"file_path": "src/lib.rs"}));
         let actions = extract_tool_actions(&msg);
         assert_eq!(actions.len(), 1);
         assert!(actions[0].contains("Read: src/lib.rs"));
@@ -573,10 +579,7 @@ mod tests {
 
     #[test]
     fn extract_grep_action() {
-        let msg = assistant_with_tool(
-            "grep",
-            serde_json::json!({"pattern": "fn main"}),
-        );
+        let msg = assistant_with_tool("grep", serde_json::json!({"pattern": "fn main"}));
         let actions = extract_tool_actions(&msg);
         assert_eq!(actions.len(), 1);
         assert!(actions[0].contains("Grep: fn main"));
@@ -584,10 +587,7 @@ mod tests {
 
     #[test]
     fn extract_glob_action() {
-        let msg = assistant_with_tool(
-            "glob",
-            serde_json::json!({"pattern": "**/*.rs"}),
-        );
+        let msg = assistant_with_tool("glob", serde_json::json!({"pattern": "**/*.rs"}));
         let actions = extract_tool_actions(&msg);
         assert_eq!(actions.len(), 1);
         assert!(actions[0].contains("Glob: **/*.rs"));
@@ -595,10 +595,7 @@ mod tests {
 
     #[test]
     fn extract_unknown_tool_action() {
-        let msg = assistant_with_tool(
-            "custom_tool",
-            serde_json::json!({}),
-        );
+        let msg = assistant_with_tool("custom_tool", serde_json::json!({}));
         let actions = extract_tool_actions(&msg);
         assert_eq!(actions.len(), 1);
         assert!(actions[0].contains("Tool: custom_tool"));
@@ -708,7 +705,11 @@ mod tests {
             ),
         ];
         let summary = summarize_conversation(&messages, &SummarizerConfig::default());
-        assert!(!summary.items_of_kind(SummaryItemKind::ToolAction).is_empty());
+        assert!(
+            !summary
+                .items_of_kind(SummaryItemKind::ToolAction)
+                .is_empty()
+        );
     }
 
     #[test]
@@ -761,7 +762,11 @@ mod tests {
             ..Default::default()
         };
         let summary = summarize_conversation(&messages, &config);
-        assert!(summary.items_of_kind(SummaryItemKind::ToolAction).is_empty());
+        assert!(
+            summary
+                .items_of_kind(SummaryItemKind::ToolAction)
+                .is_empty()
+        );
     }
 
     #[test]
@@ -846,9 +851,21 @@ mod tests {
     fn prompt_section_with_all_kinds() {
         let summary = ConversationSummary {
             items: vec![
-                SummaryItem { kind: SummaryItemKind::Decision, content: "Use async".into(), turn: 1 },
-                SummaryItem { kind: SummaryItemKind::CodeChange, content: "Wrote lib.rs".into(), turn: 1 },
-                SummaryItem { kind: SummaryItemKind::UnresolvedIssue, content: "Tests fail".into(), turn: 2 },
+                SummaryItem {
+                    kind: SummaryItemKind::Decision,
+                    content: "Use async".into(),
+                    turn: 1,
+                },
+                SummaryItem {
+                    kind: SummaryItemKind::CodeChange,
+                    content: "Wrote lib.rs".into(),
+                    turn: 1,
+                },
+                SummaryItem {
+                    kind: SummaryItemKind::UnresolvedIssue,
+                    content: "Tests fail".into(),
+                    turn: 2,
+                },
             ],
             turns_summarized: 2,
             messages_processed: 4,

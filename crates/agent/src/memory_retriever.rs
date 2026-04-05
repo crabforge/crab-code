@@ -100,8 +100,7 @@ pub fn retrieve_for_context(
     for rm in &mut ranked {
         if preferred_types.contains(&rm.memory.memory_type.as_str()) {
             rm.score *= 1.3;
-            rm.factors
-                .push(("context_type_boost".into(), 0.3));
+            rm.factors.push(("context_type_boost".into(), 0.3));
         }
     }
 
@@ -146,7 +145,10 @@ fn score_memory(
     // Keyword matching in name
     let name_score = keyword_score(&mem.name, query_terms);
     if name_score > 0.0 {
-        factors.push(("name_match".into(), name_score * config.keyword_weight * 1.5));
+        factors.push((
+            "name_match".into(),
+            name_score * config.keyword_weight * 1.5,
+        ));
     }
 
     // Keyword matching in description
@@ -177,7 +179,10 @@ fn keyword_score(text: &str, terms: &[String]) -> f64 {
     }
     let text_lower = text.to_lowercase();
     #[allow(clippy::cast_precision_loss)]
-    let matched = terms.iter().filter(|t| text_lower.contains(t.as_str())).count() as f64;
+    let matched = terms
+        .iter()
+        .filter(|t| text_lower.contains(t.as_str()))
+        .count() as f64;
     #[allow(clippy::cast_precision_loss)]
     let total = terms.len() as f64;
     matched / total
@@ -208,12 +213,11 @@ fn extract_terms(query: &str) -> Vec<String> {
 
 fn is_stop_word(word: &str) -> bool {
     const STOP_WORDS: &[&str] = &[
-        "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was",
-        "one", "our", "out", "has", "its", "how", "did", "any", "she", "him", "his", "let",
-        "may", "who", "use", "been", "from", "have", "each", "make", "like", "more", "into",
-        "over", "such", "than", "them", "then", "they", "this", "that", "what", "when",
-        "with", "will", "your", "which", "their", "there", "these", "those", "about",
-        "would", "could", "should",
+        "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was", "one",
+        "our", "out", "has", "its", "how", "did", "any", "she", "him", "his", "let", "may", "who",
+        "use", "been", "from", "have", "each", "make", "like", "more", "into", "over", "such",
+        "than", "them", "then", "they", "this", "that", "what", "when", "with", "will", "your",
+        "which", "their", "there", "these", "those", "about", "would", "could", "should",
     ];
     STOP_WORDS.contains(&word)
 }
@@ -262,7 +266,8 @@ impl MemoryRanker {
         let max_order = access_order.values().copied().max().unwrap_or(1) as f64;
 
         // Track how many of each type we've seen for diversity penalty
-        let mut type_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut type_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
 
         // Sort by current score first
         memories.sort_by(|a, b| {
@@ -416,7 +421,10 @@ mod tests {
 
     #[test]
     fn keyword_score_all_match() {
-        let score = keyword_score("rust developer systems", &["rust".into(), "developer".into()]);
+        let score = keyword_score(
+            "rust developer systems",
+            &["rust".into(), "developer".into()],
+        );
         assert!((score - 1.0).abs() < f64::EPSILON);
     }
 
@@ -481,7 +489,11 @@ mod tests {
     #[test]
     fn retrieve_relevant_rust_memory() {
         let mems = sample_memories();
-        let result = retrieve_memories(&mems, "rust developer programming", &RetrieverConfig::default());
+        let result = retrieve_memories(
+            &mems,
+            "rust developer programming",
+            &RetrieverConfig::default(),
+        );
         assert!(!result.is_empty());
         assert_eq!(result[0].memory.name, "User role");
     }
@@ -489,7 +501,11 @@ mod tests {
     #[test]
     fn retrieve_relevant_testing_memory() {
         let mems = sample_memories();
-        let result = retrieve_memories(&mems, "database testing mocked integration", &RetrieverConfig::default());
+        let result = retrieve_memories(
+            &mems,
+            "database testing mocked integration",
+            &RetrieverConfig::default(),
+        );
         assert!(!result.is_empty());
         // The "No mocks in tests" memory should rank highest
         assert!(result.iter().any(|r| r.memory.name == "No mocks in tests"));
@@ -498,7 +514,11 @@ mod tests {
     #[test]
     fn retrieve_relevant_auth_memory() {
         let mems = sample_memories();
-        let result = retrieve_memories(&mems, "authentication session token compliance", &RetrieverConfig::default());
+        let result = retrieve_memories(
+            &mems,
+            "authentication session token compliance",
+            &RetrieverConfig::default(),
+        );
         assert!(!result.is_empty());
         assert!(result.iter().any(|r| r.memory.name == "Auth rewrite"));
     }
@@ -531,7 +551,12 @@ mod tests {
     #[test]
     fn retrieve_for_debugging_context() {
         let mems = sample_memories();
-        let result = retrieve_for_context(&mems, "debugging", "database test failure", &RetrieverConfig::default());
+        let result = retrieve_for_context(
+            &mems,
+            "debugging",
+            "database test failure",
+            &RetrieverConfig::default(),
+        );
         // Feedback memories should get a boost in debugging context
         if !result.is_empty() {
             let has_feedback = result.iter().any(|r| r.memory.memory_type == "feedback");
@@ -634,7 +659,10 @@ mod tests {
 
         let result = ranker.rerank(memories, &HashMap::new());
         // Second feedback should get a diversity penalty
-        let fb2 = result.iter().find(|r| r.memory.name == "Feedback2").unwrap();
+        let fb2 = result
+            .iter()
+            .find(|r| r.memory.name == "Feedback2")
+            .unwrap();
         assert!(fb2.score < 0.9); // penalized
     }
 
