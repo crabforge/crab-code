@@ -1,12 +1,17 @@
+pub mod analytics;
+pub mod auto_summary;
 pub mod compaction;
 pub mod context;
 pub mod conversation;
 pub mod cost;
 pub mod history;
 pub mod memory;
+pub mod quality;
 pub mod tag;
 pub mod template;
 
+pub use analytics::{AnalyticsReport, ConversationDepth, SessionAnalytics, TopicSegment};
+pub use auto_summary::{SessionOutcome, SessionSummarizer, SummaryReport};
 pub use compaction::{
     CompactionClient, CompactionConfig, CompactionMode, CompactionReport, CompactionStrategy,
     CompactionTrigger, compact, compact_with_config,
@@ -16,6 +21,7 @@ pub use conversation::Conversation;
 pub use cost::CostAccumulator;
 pub use history::{ExportFormat, SearchResult, SessionHistory, SessionStats};
 pub use memory::{MemoryFile, MemoryIndexEntry, MemoryStore};
+pub use quality::{QualityScore, evaluate_session};
 pub use tag::SessionTagStore;
 pub use template::{
     SessionKind, SessionSummary, SessionTemplate, builtin_templates, find_template,
