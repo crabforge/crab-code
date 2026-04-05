@@ -1,8 +1,8 @@
 # Crab Code 架构设计
 
-> 版本：v1.3
+> 版本：v1.4
 > 更新：2026-04-05
-> 状态：架构设计阶段 📐
+> 状态：Phase 1 完成，Phase 2 进行中
 > 对标：Claude Code (TypeScript/Bun)
 
 ---
@@ -2494,31 +2494,121 @@ fn partition_tools<'a>(
 ```
 
 ```rust
-// coordinator.rs — 多 Agent 编排
-use tokio::sync::mpsc;
+// coordinator.rs — 多 Agent 编排（已实现）
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
+/// 运行中的 worker 句柄
+pub struct RunningWorker {
+    pub worker_id: String,
+    pub cancel: CancellationToken,
+    pub handle: tokio::task::JoinHandle<WorkerResult>,
+}
+
+/// 多 sub-agent 编排器
 pub struct AgentCoordinator {
-    /// 主 Agent
-    main_agent: AgentHandle,
-    /// 子 Agent 池
-    workers: Vec<AgentHandle>,
-    /// 消息总线
-    bus: mpsc::Sender<AgentMessage>,
+    backend: Arc<LlmBackend>,
+    executor: Arc<ToolExecutor>,
+    tool_ctx: ToolContext,
+    loop_config: QueryLoopConfig,
+    event_tx: mpsc::Sender<Event>,
+    running: HashMap<String, RunningWorker>,
+    completed: Vec<WorkerResult>,           // 摘要（不含对话历史）
+    cancel: CancellationToken,
 }
 
-pub struct AgentHandle {
+impl AgentCoordinator {
+    /// 启动一个新的 sub-agent worker
+    pub async fn spawn_worker(
+        &mut self,
+        config: WorkerConfig,
+        task_prompt: String,
+    ) -> crab_common::Result<String>;
+
+    /// 等待指定 worker 完成
+    pub async fn wait_for(&mut self, worker_id: &str) -> Option<WorkerResult>;
+
+    /// 等待所有 worker 完成
+    pub async fn wait_all(&mut self) -> Vec<WorkerResult>;
+
+    /// 取消指定 worker
+    pub fn cancel_worker(&mut self, worker_id: &str) -> bool;
+
+    /// 取消所有 worker
+    pub fn cancel_all(&mut self);
+}
+
+// worker.rs — Sub-agent worker 生命周期
+pub struct WorkerConfig {
+    pub worker_id: String,
+    pub system_prompt: String,
+    pub max_turns: Option<usize>,
+    pub max_duration: Option<std::time::Duration>,
+    pub context_window: u64,
+}
+
+pub struct WorkerResult {
+    pub worker_id: String,
+    pub output: Option<String>,             // 最后一条 assistant 文本
+    pub success: bool,
+    pub usage: TokenUsage,
+    pub conversation: Conversation,         // 完整对话历史
+}
+
+pub struct AgentWorker {
+    config: WorkerConfig,
+    backend: Arc<LlmBackend>,
+    executor: Arc<ToolExecutor>,
+    tool_ctx: ToolContext,
+    loop_config: QueryLoopConfig,
+    event_tx: mpsc::Sender<Event>,
+    cancel: CancellationToken,
+}
+
+impl AgentWorker {
+    /// 在 tokio 任务中运行独立 query loop
+    pub fn spawn(self, task_prompt: String) -> tokio::task::JoinHandle<WorkerResult>;
+}
+```
+
+**Task 系统（已实现）**
+
+```rust
+// task.rs — TaskStore + TaskItem + 依赖图
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TaskStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Deleted,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskItem {
     pub id: String,
-    pub name: String,
-    pub tx: mpsc::Sender<AgentMessage>,
+    pub subject: String,
+    pub description: String,
+    pub active_form: Option<String>,
+    pub status: TaskStatus,
+    pub owner: Option<String>,
+    pub metadata: serde_json::Value,
+    pub blocks: Vec<String>,         // 此任务阻塞哪些任务
+    pub blocked_by: Vec<String>,     // 此任务被哪些任务阻塞
 }
 
-pub enum AgentMessage {
-    /// 分配任务
-    AssignTask { task_id: String, prompt: String },
-    /// 任务完成
-    TaskComplete { task_id: String, result: String },
-    /// 请求协助
-    RequestHelp { from: String, message: String },
+/// 线程安全的任务存储，支持依赖图
+pub struct TaskStore {
+    items: HashMap<String, TaskItem>,
+    next_id: usize,
+}
+
+impl TaskStore {
+    pub fn create(&mut self, subject: String, description: String, ...) -> TaskItem;
+    pub fn get(&self, id: &str) -> Option<&TaskItem>;
+    pub fn list(&self) -> Vec<&TaskItem>;
+    pub fn update(&mut self, id: &str, ...) -> Option<String>;
+    pub fn add_dependency(&mut self, task_id: &str, blocked_by_id: &str);
 }
 ```
 
@@ -2920,25 +3010,35 @@ pub enum SkillTrigger {
     Manual,
 }
 
+/// Skill 触发器（已实现，#[derive(Default)] 默认为 Manual）
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(tag = "type")]
+pub enum SkillTrigger {
+    /// 用户输入 /command 触发
+    Command { name: String },
+    /// 正则匹配用户输入
+    Pattern { regex: String },
+    /// 手动调用（默认）
+    #[default]
+    Manual,
+}
+
 pub struct SkillRegistry {
     skills: Vec<SkillManifest>,
 }
 
 impl SkillRegistry {
-    /// 从 ~/.crab-code/skills/ 和项目 .crab-code/skills/ 发现技能
-    pub fn discover(paths: &[std::path::PathBuf]) -> crab_common::Result<Self> {
-        todo!()
-    }
+    /// 从 ~/.crab/skills/ 和项目 .crab/skills/ 发现技能（已实现）
+    pub fn discover(paths: &[std::path::PathBuf]) -> crab_common::Result<Self>;
 
     /// 按名称查找
-    pub fn find(&self, name: &str) -> Option<&SkillManifest> {
-        self.skills.iter().find(|s| s.name == name)
-    }
+    pub fn find(&self, name: &str) -> Option<&SkillManifest>;
 
-    /// 匹配用户输入
-    pub fn match_input(&self, input: &str) -> Vec<&SkillManifest> {
-        todo!()
-    }
+    /// 按 /command 名匹配
+    pub fn find_by_command(&self, command: &str) -> Option<&SkillManifest>;
+
+    /// 所有技能列表
+    pub fn all(&self) -> &[SkillManifest];
 }
 ```
 
@@ -3898,17 +3998,25 @@ Step 7: 初始提交
 ### 13.3 里程碑计划
 
 ```
-M1: Workspace 骨架 ─────────── cargo check 通过
-M2: core + common 类型完整 ─── 消息/工具/事件模型可用
-M3: api 流式调用 ──────────── 能调通 Anthropic API
-M4: tools 首批工具 ────────── Bash/Read/Write/Edit/Glob/Grep
-M5: session + agent ────────── query loop 跑通
-M6: tui 基础 UI ───────────── 交互式对话可用
-M7: mcp 集成 ──────────────── MCP 工具可调用
-M8: 功能对齐 CC 核心 ──────── 日常编程可用
+M0: 项目脚手架 + CI ─────────── [完成] git init, workspace, deny, fmt
+M1: 领域模型 ────────────────── [完成] core + common 85+ 类型, 300+ 测试
+M2: 流式 API ────────────────── [完成] Anthropic + OpenAI SSE, 重试, 限流
+M3: 核心工具 ────────────────── [完成] 8 内置工具, ToolRegistry, ToolExecutor
+M4: Agent 循环 ──────────────── [完成] query loop, REPL, dogfooding
+M5: TUI ─────────────────────── [完成] ratatui 交互式 UI, Vim 模式, ANSI
+M6: 配置 + 上下文管理 ──────── [完成] 权限模式, CRAB.md, 记忆, 压缩
+M7a: MCP 集成 ───────────────── [完成] stdio + SSE + WS transport, McpToolAdapter
+M7b: 多 Agent + 技能 ─────────── [完成] AgentWorker, AgentCoordinator, Task 系统,
+                                          SkillRegistry, HookExecutor, WebSearch/Fetch
+Phase 2 (计划中):
+  - OS 沙箱 (Landlock/Seatbelt)
+  - OAuth2 + Bedrock/Vertex
+  - Team/Swarm 多 agent 协调
+  - WASM 插件运行时
+  - 守护进程模式
 ```
 
 ---
 
-**最后更新**: 2026-04-02
-**版本**: v1.2
+**最后更新**: 2026-04-05
+**版本**: v1.4
