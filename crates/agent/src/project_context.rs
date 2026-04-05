@@ -423,7 +423,11 @@ impl ProjectSummary {
             let _ = writeln!(out, "- Project: {name}");
         }
 
-        let types: Vec<String> = self.project_types.iter().map(std::string::ToString::to_string).collect();
+        let types: Vec<String> = self
+            .project_types
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         let _ = writeln!(out, "- Type: {}", types.join(", "));
         let _ = writeln!(out, "- Root: {}", self.root.display());
         let _ = writeln!(out, "- Source files: {}", self.source_file_count);
