@@ -79,7 +79,7 @@ impl SessionSummarizer {
         let first_user = messages
             .iter()
             .find(|m| m.role == Role::User)
-            .map(|m| m.text());
+            .map(Message::text);
 
         match first_user {
             Some(text) if !text.is_empty() => {

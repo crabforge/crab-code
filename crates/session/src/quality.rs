@@ -127,8 +127,8 @@ fn evaluate_coherence(messages: &[Message]) -> f64 {
 /// Efficiency: ratio of assistant text tokens to total tokens.
 ///
 /// A high ratio means most tokens were used for delivering answers, not
-#[allow(clippy::cast_precision_loss)]
 /// overhead. If there are no tokens, returns 1.0.
+#[allow(clippy::cast_precision_loss)]
 fn evaluate_efficiency(messages: &[Message]) -> f64 {
     let mut total_tokens = 0u64;
     let mut assistant_text_tokens = 0u64;
