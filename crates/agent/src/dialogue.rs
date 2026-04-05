@@ -186,19 +186,16 @@ fn next_state(state: ConversationState, event: DialogueEvent) -> Option<Conversa
 
     match (state, event) {
         // Transitions → Querying
-        (S::Idle, E::UserMessage)
-        | (S::WaitingUser, E::UserMessage)
-        | (S::ToolExecution, E::ToolExecutionDone) => Some(S::Querying),
+        (S::Idle | S::WaitingUser, E::UserMessage) |
+(S::ToolExecution, E::ToolExecutionDone) => Some(S::Querying),
 
         // Transitions → Querying (self-loop while streaming)
         (S::Querying, E::QuerySent) => Some(S::Querying),
 
         // Transitions → Idle
-        (S::Querying, E::TextResponse)
-        | (S::Querying, E::Error)
-        | (S::ToolExecution, E::Error)
-        | (S::Summarizing, E::SummarizeDone)
-        | (S::Summarizing, E::Error) => Some(S::Idle),
+        (S::Querying, E::TextResponse | E::Error) |
+(S::ToolExecution | S::Summarizing, E::Error) |
+(S::Summarizing, E::SummarizeDone) => Some(S::Idle),
 
         // Transitions → ToolExecution
         (S::Querying, E::ToolCallResponse) | (S::WaitingUser, E::UserConfirmation) => {
@@ -209,7 +206,7 @@ fn next_state(state: ConversationState, event: DialogueEvent) -> Option<Conversa
         (S::ToolExecution, E::UserConfirmation) => Some(S::WaitingUser),
 
         // Transitions → Finished
-        (S::Idle, E::End) | (S::WaitingUser, E::End) => Some(S::Finished),
+        (S::Idle | S::WaitingUser, E::End) => Some(S::Finished),
 
         // End from most states
         (_, E::End) if state != S::Finished => Some(S::Finished),

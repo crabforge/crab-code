@@ -19,7 +19,10 @@ pub mod summarizer;
 pub mod system_prompt;
 pub mod task;
 pub mod team;
+pub mod tool_analytics;
+pub mod tool_patterns;
 pub mod tool_pipeline;
+pub mod tool_recommender;
 pub mod work_stealing;
 pub mod worker;
 
@@ -68,6 +71,12 @@ pub use summarizer::{
 pub use system_prompt::{build_system_prompt, build_system_prompt_with_memories};
 pub use task::{SharedTaskList, Task, TaskList, TaskStatus, shared_task_list};
 pub use team::{Capability, Team, TeamMember, TeamMode};
+pub use tool_analytics::{ToolAnalytics, ToolStats, ToolUsageRecord, ToolUsageSummary};
+pub use tool_patterns::{PatternDetector, ToolPattern, detect_patterns, suggest_next_tool};
+pub use tool_recommender::{
+    ConversationContext, ContextToolRecommender, Intent, ToolRecommendation, detect_intent,
+    recommend_tools,
+};
 pub use tool_pipeline::{
     PipelineResult, PipelineStep, StepCondition, StepResult, ToolChain, ToolPipeline,
 };
