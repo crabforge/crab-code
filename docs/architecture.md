@@ -226,9 +226,9 @@ crab-code/
 │   │       ├── feature_flag.rs        # Feature Flag 集成
 │   │       ├── policy.rs              # 权限策略、限制
 │   │       ├── keybinding.rs          # 快捷键配置
-│   │       ├── config_toml.rs         # [Phase 2] config.toml 多提供商配置
-│   │       ├── hot_reload.rs          # [Phase 2] settings.json 热重载监听
-│   │       └── permissions.rs         # [Phase 2] 权限决策统一入口
+│   │       ├── config_toml.rs         # config.toml 多提供商配置
+│   │       ├── hot_reload.rs          # settings.json 热重载监听
+│   │       └── permissions.rs         # 权限决策统一入口
 │   │
 │   ├── auth/                          # crab-auth: 认证
 │   │   ├── Cargo.toml
@@ -238,10 +238,10 @@ crab-code/
 │   │       ├── keychain.rs            # 系统 Keychain (macOS/Win/Linux)
 │   │       ├── api_key.rs             # API Key 管理
 │   │       ├── bedrock_auth.rs        # AWS SigV4 签名 (feature)
-│   │       ├── vertex_auth.rs         # [Phase 2] GCP Vertex 认证
-│   │       ├── aws_iam.rs             # [Phase 2] AWS IAM Roles + IRSA
-│   │       ├── gcp_identity.rs        # [Phase 2] GCP Workload Identity Federation
-│   │       └── credential_chain.rs    # [Phase 2] 凭证链（优先级顺序解析）
+│   │       ├── vertex_auth.rs         # GCP Vertex 认证
+│   │       ├── aws_iam.rs             # AWS IAM Roles + IRSA
+│   │       ├── gcp_identity.rs        # GCP Workload Identity Federation
+│   │       └── credential_chain.rs    # 凭证链（优先级顺序解析）
 │   │
 │   ├── api/                           # crab-api: LLM API 客户端
 │   │   ├── Cargo.toml
@@ -263,12 +263,12 @@ crab-code/
 │   │       ├── rate_limit.rs          # 共享速率限制、指数退避
 │   │       ├── cache.rs               # Prompt cache (Anthropic 路径)
 │   │       ├── error.rs
-│   │       ├── streaming.rs           # [Phase 2] 流式工具调用解析
-│   │       ├── fallback.rs            # [Phase 2] 多模型回退链
-│   │       ├── capabilities.rs        # [Phase 2] 模型能力协商与发现
-│   │       ├── context_optimizer.rs   # [Phase 2] 上下文窗口优化 + 智能截断
-│   │       ├── retry_strategy.rs      # [Phase 2] 增强重试策略
-│   │       └── error_classifier.rs    # [Phase 2] 错误分类（可重试/不可重试）
+│   │       ├── streaming.rs           # 流式工具调用解析
+│   │       ├── fallback.rs            # 多模型回退链
+│   │       ├── capabilities.rs        # 模型能力协商与发现
+│   │       ├── context_optimizer.rs   # 上下文窗口优化 + 智能截断
+│   │       ├── retry_strategy.rs      # 增强重试策略
+│   │       └── error_classifier.rs    # 错误分类（可重试/不可重试）
 │   │
 │   ├── mcp/                           # crab-mcp: MCP 协议
 │   │   ├── Cargo.toml
@@ -285,17 +285,17 @@ crab-code/
 │   │       │   └── ws.rs              # WebSocket (feature)
 │   │       ├── resource.rs            # Resource 缓存、模板
 │   │       ├── discovery.rs           # Server 自动发现
-│   │       ├── sse_server.rs          # [Phase 2] SSE server transport（crab 作为 server）
-│   │       ├── sampling.rs            # [Phase 2] MCP sampling（LLM 推理请求）
-│   │       ├── roots.rs               # [Phase 2] MCP roots（工作区根目录声明）
-│   │       ├── logging.rs             # [Phase 2] MCP logging 协议消息
-│   │       ├── handshake.rs           # [Phase 2] 初始化握手流程
-│   │       ├── negotiation.rs         # [Phase 2] 能力协商
-│   │       ├── capability.rs          # [Phase 2] 能力声明类型
-│   │       ├── notification.rs        # [Phase 2] 服务端通知推送
-│   │       ├── progress.rs            # [Phase 2] 进度报告
-│   │       ├── cancellation.rs        # [Phase 2] 请求取消机制
-│   │       └── health.rs              # [Phase 2] 健康检查 + 心跳
+│   │       ├── sse_server.rs          # SSE server transport（crab 作为 server）
+│   │       ├── sampling.rs            # MCP sampling（LLM 推理请求）
+│   │       ├── roots.rs               # MCP roots（工作区根目录声明）
+│   │       ├── logging.rs             # MCP logging 协议消息
+│   │       ├── handshake.rs           # 初始化握手流程
+│   │       ├── negotiation.rs         # 能力协商
+│   │       ├── capability.rs          # 能力声明类型
+│   │       ├── notification.rs        # 服务端通知推送
+│   │       ├── progress.rs            # 进度报告
+│   │       ├── cancellation.rs        # 请求取消机制
+│   │       └── health.rs              # 健康检查 + 心跳
 │   │
 │   ├── fs/                            # crab-fs: 文件系统
 │   │   ├── Cargo.toml
@@ -307,7 +307,7 @@ crab-code/
 │   │       ├── watch.rs               # notify 文件监听（含防抖、批量）
 │   │       ├── lock.rs                # 文件锁 (fd-lock)
 │   │       ├── diff.rs                # similar 封装, patch 生成
-│   │       └── symlink.rs             # [Phase 2] 符号链接处理 + 安全解析
+│   │       └── symlink.rs             # 符号链接处理 + 安全解析
 │   │
 │   ├── process/                       # crab-process: 子进程管理
 │   │   ├── Cargo.toml
@@ -363,7 +363,7 @@ crab-code/
 │   │       ├── history.rs             # 会话持久化、恢复、搜索、导出
 │   │       ├── memory.rs              # 记忆系统 (文件持久化)
 │   │       ├── cost.rs                # token 计数、费用追踪
-│   │       └── template.rs            # [Phase 2] 会话模板 + 快速恢复
+│   │       └── template.rs            # 会话模板 + 快速恢复
 │   │
 │   ├── agent/                         # crab-agent: 多 Agent 系统
 │   │   ├── Cargo.toml
@@ -377,11 +377,11 @@ crab-code/
 │   │       ├── message_router.rs      # Agent 间消息路由
 │   │       ├── worker.rs              # 子 Agent worker
 │   │       ├── system_prompt.rs       # 系统提示构建 + CRAB.md 注入
-│   │       ├── summarizer.rs          # [Phase 2] 对话摘要生成
-│   │       ├── rollback.rs            # [Phase 2] 回滚机制
-│   │       ├── error_recovery.rs      # [Phase 2] 错误恢复策略
-│   │       ├── retry.rs               # [Phase 2] 自动重试机制
-│   │       └── repl_commands.rs       # [Phase 2] REPL 命令（/undo /branch /fork）
+│   │       ├── summarizer.rs          # 对话摘要生成
+│   │       ├── rollback.rs            # 回滚机制
+│   │       ├── error_recovery.rs      # 错误恢复策略
+│   │       ├── retry.rs               # 自动重试机制
+│   │       └── repl_commands.rs       # REPL 命令（/undo /branch /fork）
 │   │
 │   ├── tui/                           # crab-tui: 终端 UI（21 组件）
 │   │   ├── Cargo.toml
@@ -404,17 +404,17 @@ crab-code/
 │   │       │   ├── dialog.rs          # 确认/权限对话框
 │   │       │   ├── cost_bar.rs        # token/费用状态栏
 │   │       │   ├── task_list.rs       # 任务进度面板
-│   │       │   ├── autocomplete.rs    # [Phase 2] 自动补全弹出框
-│   │       │   ├── code_block.rs      # [Phase 2] 代码块 + 复制按钮
-│   │       │   ├── command_palette.rs # [Phase 2] 命令面板（Ctrl+P）
-│   │       │   ├── input_history.rs   # [Phase 2] 输入历史（↑↓）
-│   │       │   ├── loading.rs         # [Phase 2] 加载动画组件
-│   │       │   ├── notification.rs    # [Phase 2] Toast 通知系统
-│   │       │   ├── progress_indicator.rs # [Phase 2] 进度指示器
-│   │       │   ├── search.rs          # [Phase 2] 全局搜索面板
-│   │       │   ├── shortcut_hint.rs   # [Phase 2] 快捷键提示栏
-│   │       │   ├── status_bar.rs      # [Phase 2] 增强状态栏
-│   │       │   └── tool_output.rs     # [Phase 2] 工具输出折叠显示
+│   │       │   ├── autocomplete.rs    # 自动补全弹出框
+│   │       │   ├── code_block.rs      # 代码块 + 复制按钮
+│   │       │   ├── command_palette.rs # 命令面板（Ctrl+P）
+│   │       │   ├── input_history.rs   # 输入历史（↑↓）
+│   │       │   ├── loading.rs         # 加载动画组件
+│   │       │   ├── notification.rs    # Toast 通知系统
+│   │       │   ├── progress_indicator.rs # 进度指示器
+│   │       │   ├── search.rs          # 全局搜索面板
+│   │       │   ├── shortcut_hint.rs   # 快捷键提示栏
+│   │       │   ├── status_bar.rs      # 增强状态栏
+│   │       │   └── tool_output.rs     # 工具输出折叠显示
 │   │       ├── vim/
 │   │       │   ├── mod.rs
 │   │       │   ├── motion.rs
@@ -1055,9 +1055,9 @@ src/
 ├── feature_flag.rs       // Feature Flag 集成
 ├── policy.rs             // 权限策略、限制
 ├── keybinding.rs         // 快捷键配置
-├── config_toml.rs        // [Phase 2] config.toml 多提供商配置格式
-├── hot_reload.rs         // [Phase 2] settings.json 热重载（notify 监听）
-└── permissions.rs        // [Phase 2] 权限决策统一入口
+├── config_toml.rs        // config.toml 多提供商配置格式
+├── hot_reload.rs         // settings.json 热重载（notify 监听）
+└── permissions.rs        // 权限决策统一入口
 ```
 
 **配置层级（三级合并，低优先级 → 高优先级）**
@@ -1070,53 +1070,7 @@ src/
 
 **核心类型**
 
-```rust
-// settings.rs
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct Settings {
-    /// API provider（"anthropic" | "openai" | "ollama" | "deepseek" | "bedrock" | "vertex"）
-    pub api_provider: Option<String>,
-    /// 自定义 API base URL（如 http://localhost:11434/v1）
-    pub api_base_url: Option<String>,
-    /// API Key（OpenAI-compatible provider 使用，Anthropic 走 keychain/环境变量）
-    pub api_key: Option<String>,
-    /// 模型 ID
-    pub model: Option<String>,
-    /// 小模型（用于压缩等轻量任务）
-    pub small_model: Option<String>,
-    /// 权限模式
-    pub permission_mode: Option<String>,
-    /// 自定义系统提示
-    pub system_prompt: Option<String>,
-    /// MCP servers 配置
-    pub mcp_servers: Option<serde_json::Value>,
-    /// Hooks 配置
-    pub hooks: Option<serde_json::Value>,
-    /// 主题
-    pub theme: Option<String>,
-}
-
-/// 三级配置合并
-pub fn load_merged_settings(project_dir: Option<&PathBuf>) -> crab_common::Result<Settings> {
-    let global = load_settings_file(&global_settings_path());
-    let user = load_settings_file(&user_settings_path());
-    let project = project_dir
-        .map(|d| load_settings_file(&d.join(".crab-code/settings.json")));
-
-    let mut merged = global.unwrap_or_default();
-    if let Ok(user) = user {
-        merge_settings(&mut merged, &user);
-    }
-    if let Some(Ok(proj)) = project {
-        merge_settings(&mut merged, &proj);
-    }
-    Ok(merged)
-}
-```
+`Settings` 结构体涵盖：`api_provider`、`api_base_url`、`api_key`、`model`、`small_model`、`permission_mode`、`system_prompt`、`mcp_servers`、`hooks`、`theme` 等字段。三级配置通过 `load_merged_settings()` 逐级合并（全局 → 用户 → 项目），高优先级字段覆盖低优先级。
 
 ```rust
 // crab_md.rs — CRAB.md 解析
@@ -1134,7 +1088,7 @@ pub enum CrabMdSource {
 /// 按优先级收集所有 CRAB.md 内容
 pub fn collect_crab_md(project_dir: &std::path::Path) -> Vec<CrabMd> {
     // 全局 → 用户 → 项目，逐级叠加
-    todo!()
+    // ...
 }
 ```
 
@@ -1157,10 +1111,10 @@ src/
 ├── keychain.rs           // 系统 Keychain（macOS/Windows/Linux）
 ├── api_key.rs            // API Key 管理（环境变量 / 文件）
 ├── bedrock_auth.rs       // AWS SigV4 签名 (feature = "bedrock")
-├── vertex_auth.rs        // [Phase 2] GCP Vertex AI 认证
-├── aws_iam.rs            // [Phase 2] AWS IAM Roles + IRSA（Pod 级别）
-├── gcp_identity.rs       // [Phase 2] GCP Workload Identity Federation
-└── credential_chain.rs   // [Phase 2] 凭证链（优先级顺序探测：env → keychain → file → IAM）
+├── vertex_auth.rs        // GCP Vertex AI 认证
+├── aws_iam.rs            // AWS IAM Roles + IRSA（Pod 级别）
+├── gcp_identity.rs       // GCP Workload Identity Federation
+└── credential_chain.rs   // 凭证链（优先级顺序探测：env → keychain → file → IAM）
 ```
 
 **核心接口**
@@ -1263,12 +1217,12 @@ src/
 ├── rate_limit.rs         // 共享的速率限制、指数退避
 ├── cache.rs              // Prompt cache 管理 (仅 Anthropic 路径使用)
 ├── error.rs
-├── streaming.rs          // [Phase 2] 流式工具调用解析（部分工具参数流式输入）
-├── fallback.rs           // [Phase 2] 多模型回退链（主模型失败→备用模型）
-├── capabilities.rs       // [Phase 2] 模型能力协商与发现
-├── context_optimizer.rs  // [Phase 2] 上下文窗口优化 + 智能截断策略
-├── retry_strategy.rs     // [Phase 2] 增强重试策略（退避 + jitter）
-└── error_classifier.rs   // [Phase 2] 错误分类（可重试/不可重试/速率限制）
+├── streaming.rs          // 流式工具调用解析（部分工具参数流式输入）
+├── fallback.rs           // 多模型回退链（主模型失败→备用模型）
+├── capabilities.rs       // 模型能力协商与发现
+├── context_optimizer.rs  // 上下文窗口优化 + 智能截断策略
+├── retry_strategy.rs     // 增强重试策略（退避 + jitter）
+└── error_classifier.rs   // 错误分类（可重试/不可重试/速率限制）
 ```
 
 **核心接口**
@@ -1400,7 +1354,7 @@ impl AnthropicClient {
         // 2. POST /v1/messages, 设置 stream: true
         // 3. 解析 Anthropic SSE: message_start / content_block_delta / message_stop
         // 4. self::convert::to_stream_event() 映射为内部 StreamEvent
-        todo!()
+        // ...
     }
 
     /// 非流式调用
@@ -1408,7 +1362,7 @@ impl AnthropicClient {
         &self,
         req: crate::types::MessageRequest<'_>,
     ) -> crab_common::Result<(crab_core::message::Message, crab_core::model::TokenUsage)> {
-        todo!()
+        // ...
     }
 }
 ```
@@ -1447,7 +1401,7 @@ impl OpenAiClient {
         // 2. POST /v1/chat/completions, stream: true
         // 3. 解析 OpenAI SSE: data: {"choices":[{"delta":...}]}
         // 4. self::convert::to_stream_event() 映射为内部 StreamEvent
-        todo!()
+        // ...
     }
 
     /// 非流式调用
@@ -1455,7 +1409,7 @@ impl OpenAiClient {
         &self,
         req: crate::types::MessageRequest<'_>,
     ) -> crab_common::Result<(crab_core::message::Message, crab_core::model::TokenUsage)> {
-        todo!()
+        // ...
     }
 }
 ```
@@ -1527,17 +1481,17 @@ src/
 │   └── ws.rs               // WebSocket 传输 (feature = "ws")
 ├── resource.rs             // Resource 缓存、模板
 ├── discovery.rs            // Server 自动发现
-├── sse_server.rs           // [Phase 2] SSE server transport（crab 作为 MCP server）
-├── sampling.rs             // [Phase 2] MCP sampling（服务端请求 LLM 推理）
-├── roots.rs                // [Phase 2] MCP roots（工作区根目录声明）
-├── logging.rs              // [Phase 2] MCP logging 协议（结构化日志消息）
-├── handshake.rs            // [Phase 2] 初始化握手流程（initialize/initialized）
-├── negotiation.rs          // [Phase 2] 能力协商（客户端/服务端能力集合）
-├── capability.rs           // [Phase 2] 能力声明类型（resources/tools/prompts/sampling）
-├── notification.rs         // [Phase 2] 服务端通知推送（工具变更/资源更新）
-├── progress.rs             // [Phase 2] 进度报告（长时间工具执行）
-├── cancellation.rs         // [Phase 2] 请求取消机制（$/cancelRequest）
-└── health.rs               // [Phase 2] 健康检查 + 心跳（自动重连）
+├── sse_server.rs           // SSE server transport（crab 作为 MCP server）
+├── sampling.rs             // MCP sampling（服务端请求 LLM 推理）
+├── roots.rs                // MCP roots（工作区根目录声明）
+├── logging.rs              // MCP logging 协议（结构化日志消息）
+├── handshake.rs            // 初始化握手流程（initialize/initialized）
+├── negotiation.rs          // 能力协商（客户端/服务端能力集合）
+├── capability.rs           // 能力声明类型（resources/tools/prompts/sampling）
+├── notification.rs         // 服务端通知推送（工具变更/资源更新）
+├── progress.rs             // 进度报告（长时间工具执行）
+├── cancellation.rs         // 请求取消机制（$/cancelRequest）
+└── health.rs               // 健康检查 + 心跳（自动重连）
 ```
 
 **核心类型**
@@ -1639,7 +1593,7 @@ impl McpClient {
         // 1. 发送 initialize 请求
         // 2. 获取 server capabilities
         // 3. 拉取 tools/list
-        todo!()
+        // ...
     }
 
     /// 调用 MCP 工具
@@ -1648,12 +1602,12 @@ impl McpClient {
         name: &str,
         input: serde_json::Value,
     ) -> crab_common::Result<serde_json::Value> {
-        todo!()
+        // ...
     }
 
     /// 读取 MCP 资源
     pub async fn read_resource(&self, uri: &str) -> crab_common::Result<String> {
-        todo!()
+        // ...
     }
 
     pub fn tools(&self) -> &[McpToolDef] {
@@ -1689,7 +1643,7 @@ src/
 ├── watch.rs              // notify 文件监听（含防抖 + 批量聚合）
 ├── lock.rs               // 文件锁 (fd-lock)
 ├── diff.rs               // similar 封装，edit/patch 生成
-└── symlink.rs            // [Phase 2] 符号链接处理 + 安全路径解析（防逃逸）
+└── symlink.rs            // 符号链接处理 + 安全路径解析（防逃逸）
 ```
 
 **核心接口**
@@ -1711,7 +1665,7 @@ pub fn find_files(
 ) -> crab_common::Result<GlobResult> {
     // 使用 ignore crate（自动尊重 .gitignore）
     // 按修改时间排序
-    todo!()
+    // ...
 }
 
 // grep.rs — 内容搜索
@@ -1734,7 +1688,7 @@ pub struct GrepOptions {
 pub fn search(opts: &GrepOptions) -> crab_common::Result<Vec<GrepMatch>> {
     // 使用 grep-regex + grep-searcher
     // 自动尊重 .gitignore
-    todo!()
+    // ...
 }
 
 // diff.rs — Diff 生成
@@ -1751,7 +1705,7 @@ pub fn apply_edit(
     new_string: &str,
 ) -> crab_common::Result<EditResult> {
     // 使用 similar 生成 unified diff
-    todo!()
+    // ...
 }
 ```
 
@@ -1807,7 +1761,7 @@ pub async fn run(opts: SpawnOptions) -> crab_common::Result<SpawnOutput> {
     // 2. 设置 working_dir, env
     // 3. 如有 timeout 则 tokio::time::timeout 包裹
     // 4. 收集 stdout/stderr
-    todo!()
+    // ...
 }
 
 /// 执行命令并流式返回输出
@@ -1816,7 +1770,7 @@ pub async fn run_streaming(
     on_stdout: impl Fn(&str) + Send,
     on_stderr: impl Fn(&str) + Send,
 ) -> crab_common::Result<i32> {
-    todo!()
+    // ...
 }
 
 // tree.rs — 进程树管理
@@ -1826,7 +1780,7 @@ pub fn kill_tree(pid: u32) -> crab_common::Result<()> {
     let mut sys = System::new();
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     // 递归查找子进程并 kill
-    todo!()
+    // ...
 }
 
 // signal.rs — 信号处理
@@ -2277,7 +2231,7 @@ src/
 ├── history.rs        // 会话持久化、恢复、搜索、导出、统计
 ├── memory.rs         // 记忆系统（文件持久化）
 ├── cost.rs           // token 计数、费用追踪
-└── template.rs       // [Phase 2] 会话模板 + 快速恢复
+└── template.rs       // 会话模板 + 快速恢复
 ```
 
 **核心类型**
@@ -2380,7 +2334,7 @@ pub async fn compact(
     client: &impl CompactionClient,
 ) -> crab_common::Result<()> {
     // 根据策略压缩消息，使用 client.summarize() 生成摘要
-    todo!()
+    // ...
 }
 
 // memory.rs — 记忆系统
@@ -2391,12 +2345,12 @@ pub struct MemoryStore {
 impl MemoryStore {
     /// 保存会话记忆
     pub fn save(&self, session_id: &str, content: &str) -> crab_common::Result<()> {
-        todo!()
+        // ...
     }
 
     /// 加载会话记忆
     pub fn load(&self, session_id: &str) -> crab_common::Result<Option<String>> {
-        todo!()
+        // ...
     }
 }
 ```
@@ -2426,11 +2380,11 @@ src/
 ├── message_router.rs     // Agent 间消息路由（按 name/broadcast）
 ├── worker.rs             // 子 Agent worker 生命周期
 ├── system_prompt.rs      // 系统提示构建 + CRAB.md 注入
-├── summarizer.rs         // [Phase 2] 对话摘要生成
-├── rollback.rs           // [Phase 2] 回滚机制（/undo）
-├── error_recovery.rs     // [Phase 2] 错误恢复策略（自动重试/降级）
-├── retry.rs              // [Phase 2] 自动重试机制（指数退避）
-└── repl_commands.rs      // [Phase 2] REPL 命令（/undo /branch /fork /checkpoint）
+├── summarizer.rs         // 对话摘要生成
+├── rollback.rs           // 回滚机制（/undo）
+├── error_recovery.rs     // 错误恢复策略（自动重试/降级）
+├── retry.rs              // 自动重试机制（指数退避）
+└── repl_commands.rs      // REPL 命令（/undo /branch /fork /checkpoint）
 ```
 
 **消息循环（核心）**
@@ -2795,17 +2749,17 @@ src/
 │   ├── dialog.rs           // 确认/权限对话框
 │   ├── cost_bar.rs         // token/费用状态栏
 │   ├── task_list.rs        // 任务进度面板
-│   ├── autocomplete.rs     // [Phase 2] 自动补全弹出框（输入时触发）
-│   ├── code_block.rs       // [Phase 2] 代码块 + 一键复制按钮
-│   ├── command_palette.rs  // [Phase 2] 命令面板（Ctrl+P，模糊搜索命令）
-│   ├── input_history.rs    // [Phase 2] 输入历史（↑↓ 浏览历史输入）
-│   ├── loading.rs          // [Phase 2] 加载动画组件（多种动画样式）
-│   ├── notification.rs     // [Phase 2] Toast 通知系统（顶部弹出/自动消失）
-│   ├── progress_indicator.rs // [Phase 2] 进度指示器（百分比 + 进度条）
-│   ├── search.rs           // [Phase 2] 全局搜索面板（内容/文件名搜索）
-│   ├── shortcut_hint.rs    // [Phase 2] 快捷键提示栏（底部常显）
-│   ├── status_bar.rs       // [Phase 2] 增强状态栏（模式/provider/token/延迟）
-│   └── tool_output.rs      // [Phase 2] 工具输出折叠显示（可展开/收起）
+│   ├── autocomplete.rs     // 自动补全弹出框（输入时触发）
+│   ├── code_block.rs       // 代码块 + 一键复制按钮
+│   ├── command_palette.rs  // 命令面板（Ctrl+P，模糊搜索命令）
+│   ├── input_history.rs    // 输入历史（↑↓ 浏览历史输入）
+│   ├── loading.rs          // 加载动画组件（多种动画样式）
+│   ├── notification.rs     // Toast 通知系统（顶部弹出/自动消失）
+│   ├── progress_indicator.rs // 进度指示器（百分比 + 进度条）
+│   ├── search.rs           // 全局搜索面板（内容/文件名搜索）
+│   ├── shortcut_hint.rs    // 快捷键提示栏（底部常显）
+│   ├── status_bar.rs       // 增强状态栏（模式/provider/token/延迟）
+│   └── tool_output.rs      // 工具输出折叠显示（可展开/收起）
 │
 ├── vim/                    // Vim 模式
 │   ├── mod.rs
@@ -3044,7 +2998,7 @@ impl App {
         // 上: 消息历史 (Markdown 渲染)
         // 中: 工具输出 / spinner
         // 下: 输入框 + 状态栏
-        todo!()
+        // ...
     }
 }
 ```
@@ -3054,38 +3008,6 @@ impl App {
 > tui 不直接依赖 tools，通过 `crab_core::Event` 枚举接收工具执行状态，由 crates/cli 负责组装 agent+tui。
 
 **Feature Flags**：无（tui 本身是 cli 的可选依赖）
-
-#### 6.12.1 待实现的关键功能
-
-以下功能在当前骨架中尚未实现，是达到 CC 同等体验的必要项：
-
-**虚拟滚动**
-- 当前渲染所有消息行 → 长对话时性能劣化
-- 方案：只渲染 viewport + overscan 行（上下各 5-10 行缓冲）
-- 参考：ratatui `StatefulWidget` + 自定义 `ScrollState { offset, total_lines, viewport_height }`
-- 复杂度：需重写 `components/markdown.rs` 的渲染逻辑，按行索引定位
-
-**ANSI 处理**
-- 工具输出（如 `cargo build`）包含 ANSI 转义序列，需转换为 ratatui `Span` 样式
-- 方案：`anstyle-parse` 或 `cansi` crate 解析 → ratatui `Style` 映射
-- 文件位置：`components/ansi.rs`（新增）
-- 关键：支持 SGR（颜色/粗体/下划线）、忽略光标移动等不支持的序列
-
-**Bracketed paste**
-- 大段代码粘贴需要 bracketed paste 模式，避免逐字符触发输入事件
-- 方案：crossterm `EnableBracketedPaste` + 处理 `Event::Paste(text)` in `input.rs`
-- 启用/禁用时机：终端初始化/恢复时成对调用
-
-**鼠标支持**
-- 滚轮滚动消息区、点击选择文本
-- 方案：crossterm `EnableMouseCapture` + 处理 `Event::Mouse` 事件
-- scroll wheel → 调整 `ScrollState.offset`
-- click → 根据坐标定位到组件并聚焦
-
-**Panic hook**
-- TUI panic 时必须恢复终端状态（disable raw mode、show cursor），否则终端不可用
-- 方案：`std::panic::set_hook` 在 panic handler 中调用 `crossterm::terminal::disable_raw_mode()` + `execute!(stdout(), LeaveAlternateScreen)`
-- 推荐：使用 `color-eyre` crate 的 `install()` 自动处理，同时提供美化的 panic 报告
 
 ---
 
@@ -3357,13 +3279,13 @@ async fn main() -> anyhow::Result<()> {
     match cli.command.unwrap_or(Commands::Chat) {
         Commands::Chat => {
             // 启动交互模式
-            todo!()
+            // ...
         }
         Commands::Run { prompt } => {
             // 单次执行
-            todo!()
+            // ...
         }
-        _ => todo!(),
+        _ => { /* ... */ }
     }
 
     Ok(())
@@ -3501,7 +3423,7 @@ async fn main() -> anyhow::Result<()> {
     // 4. 监听 IPC socket
     // 5. accept loop: 每个 CLI 连接 spawn 独立 handler
     // 6. 定期清理空闲 session
-    todo!()
+    // ...
 }
 ```
 
@@ -3663,85 +3585,9 @@ repository = "https://github.com/user/crab-code"
 description = "AI coding assistant in Rust"
 
 [workspace.dependencies]
-# ─── 异步运行时 ───
-tokio = { version = "1", features = ["full"] }
-tokio-util = { version = "0.7", features = ["sync"] }
-futures = "0.3"
-
-# ─── 序列化 ───
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_yml = "0.0.12"
-toml = "0.8"
-
-# ─── CLI ───
-clap = { version = "4", features = ["derive"] }
-
-# ─── HTTP ───
-reqwest = { version = "0.13", features = ["json", "stream"] }
-
-# ─── TUI ───
-ratatui = "0.30"
-crossterm = "0.29"
-
-# ─── 错误处理 ───
-thiserror = "2"
-anyhow = "1"
-
-# ─── 日志/追踪 ───
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# ─── 文件系统 ───
-globset = "0.4"
-similar = "3"
-notify = "8"
-ignore = "0.4"
-fd-lock = "4.0"
-dunce = "1"
-
-# ─── 代码渲染 ───
-syntect = "5"
-pulldown-cmark = "0.13"
-
-# ─── 系统 ───
-sysinfo = "0.38"
-directories = "6"
-
-# ─── 认证 ───
-keyring = "3"
-oauth2 = "5"
-
-# ─── 可观测性 ───
-opentelemetry = "0.31"
-opentelemetry-otlp = "0.31"
-opentelemetry-sdk = "0.31"
-tracing-opentelemetry = "0.32"
-
-# ─── 杂项 ───
-uuid = { version = "1", features = ["v4"] }
-ulid = "1"
-lru = "0.12"
-unicode-width = "0.2"
-strip-ansi-escapes = "0.2"
-jsonc-parser = "0.32"
-schemars = "1"
-
-# ─── 内部 crate ───
-crab-common    = { path = "crates/common" }
-crab-core      = { path = "crates/core" }
-crab-api       = { path = "crates/api" }
-crab-mcp       = { path = "crates/mcp" }
-crab-tools     = { path = "crates/tools" }
-crab-agent     = { path = "crates/agent" }
-crab-session   = { path = "crates/session" }
-crab-auth      = { path = "crates/auth" }
-crab-config    = { path = "crates/config" }
-crab-fs        = { path = "crates/fs" }
-crab-process   = { path = "crates/process" }
-crab-tui       = { path = "crates/tui" }
-crab-plugin    = { path = "crates/plugin" }
-crab-telemetry = { path = "crates/telemetry" }
+# 完整依赖列表见根 Cargo.toml
+# 主要分类：异步运行时(tokio)、序列化(serde)、CLI(clap)、HTTP(reqwest)、
+# TUI(ratatui)、错误处理(thiserror/anyhow)、文件系统(globset/ignore)等
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -3983,126 +3829,3 @@ GCP 场景:
 
 
 
----
-
-## 十二、开发环境与工具链
-
-### 12.1 Windows 开发环境
-
-**前置条件**
-
-- Rust stable (>= 1.85) via rustup
-- Visual Studio Build Tools 2022 (MSVC)
-- Git for Windows
-
-### 12.2 加速编译 — `~/.cargo/config.toml`
-
-```toml
-[target.x86_64-pc-windows-msvc]
-linker = "rust-lld.exe"
-
-[build]
-jobs = 8
-
-[registries.crates-io]
-protocol = "sparse"
-```
-
-> `rust-lld` 在 Windows 上可将链接时间减少 30-50%。
-
-### 12.3 推荐工具
-
-| 工具 | 用途 | 安装 |
-|------|------|------|
-| **VS Code + rust-analyzer** | IDE | Extension marketplace |
-| **RustRover** | 备选 IDE | JetBrains Toolbox |
-| **cargo-nextest** | 快速测试 | `cargo install cargo-nextest` |
-| **cargo-watch** | 自动重编译 | `cargo install cargo-watch` |
-| **cargo-deny** | 依赖审计 | `cargo install cargo-deny` |
-| **cargo-release** | 发布管理 | `cargo install cargo-release` |
-| **cargo-expand** | 宏展开调试 | `cargo install cargo-expand` |
-| **cargo-flamegraph** | 性能分析 | `cargo install flamegraph` |
-| **taplo** | TOML 格式化 | `cargo install taplo-cli` |
-
-### 12.4 常用开发命令
-
-```bash
-# 全量检查
-cargo check --workspace
-
-# Lint（零 warning 标准）
-cargo clippy --workspace -- -D warnings
-
-# 格式化
-cargo fmt --all
-
-# 测试
-cargo nextest run --workspace
-
-# 单 crate 开发
-cargo watch -w crates/core -x "check -p crab-core"
-
-# 带特定 feature 构建
-cargo build -p crab-cli -F full
-
-# 查看依赖树
-cargo tree -p crab-cli
-```
-
-### 12.5 CI/CD 与发布策略
-
-**GitHub Actions CI 配置概要**
-
-```yaml
-# .github/workflows/ci.yml
-name: CI
-on: [push, pull_request]
-
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
-        with: { components: "rustfmt, clippy" }
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace -- -D warnings
-      - run: cargo check --workspace
-      - run: cargo check -p crab-cli --no-default-features  # minimal 构建
-      - run: cargo check -p crab-cli -F full                 # full 构建
-
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo nextest run --workspace
-
-  deny:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
-```
-
-**发布分发策略**
-
-| 平台 | 产物 | 分发方式 |
-|------|------|---------|
-| Linux x86_64 | `crab-code` 静态链接 | GitHub Release + `cargo-binstall` |
-| macOS arm64/x86_64 | universal binary | GitHub Release + Homebrew tap |
-| Windows x86_64 | `crab-code.exe` | GitHub Release + `winget` manifest |
-
-```yaml
-# .github/workflows/release.yml (触发: tag v*)
-# 使用 cross 交叉编译，cargo-dist 打包
-# 自动生成 checksums + GitHub Release
-```
-
-> 初期手动 `cargo build --release` + GitHub Release，
-> 后续可引入 `cargo-dist` 自动化多平台构建和发布。
