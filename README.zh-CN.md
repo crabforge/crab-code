@@ -2,8 +2,6 @@
 
 <img src="assets/logo-horizontal.svg" width="360" alt="Crab Code" />
 
-# Crab Code
-
 **Claude Code 的开源替代品，从零用 Rust 构建。**
 
 *受 Claude Code 的 Agentic 工作流启发 -- 开源、Rust 原生、支持任意 LLM。*

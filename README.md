@@ -2,8 +2,6 @@
 
 <img src="assets/logo-horizontal.svg" width="360" alt="Crab Code" />
 
-# Crab Code
-
 **Open-source alternative to Claude Code, built from scratch in Rust.**
 
 *Inspired by Claude Code's agentic workflow -- open source, Rust-native, works with any LLM.*
