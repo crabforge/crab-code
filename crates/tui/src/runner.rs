@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -152,12 +151,15 @@ pub async fn run(config: TuiConfig) -> anyhow::Result<()> {
     // Set up terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let term_backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(term_backend)?;
 
     let model_name = loop_config.model.as_str().to_string();
     let mut app = App::new(&model_name);
+    if let Ok(cwd) = std::env::current_dir() {
+        app.set_working_dir(cwd.display().to_string());
+    }
 
     // Main render + event loop
     let result = run_loop(
@@ -181,8 +183,7 @@ pub async fn run(config: TuiConfig) -> anyhow::Result<()> {
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
+        LeaveAlternateScreen
     )?;
     terminal.show_cursor()?;
 

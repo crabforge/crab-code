@@ -90,6 +90,8 @@ pub struct App {
     pub image_placeholders: Vec<ImagePlaceholder>,
     /// Tab-completion engine for `/commands` and file paths.
     pub autocomplete: AutoComplete,
+    /// Working directory (displayed in header).
+    pub working_dir: String,
 }
 
 impl App {
@@ -116,7 +118,13 @@ impl App {
             search: SearchState::new(),
             image_placeholders: Vec::new(),
             autocomplete: AutoComplete::default(),
+            working_dir: String::new(),
         }
+    }
+
+    /// Set the working directory (displayed in header).
+    pub fn set_working_dir(&mut self, dir: impl Into<String>) {
+        self.working_dir = dir.into();
     }
 
     /// Set the current session ID.
@@ -528,20 +536,17 @@ impl App {
             crate::layout::DEFAULT_SIDEBAR_WIDTH,
         );
 
-        // Top bar (enhanced with session ID + token usage)
-        render_top_bar_enhanced(
+        // Header (3 lines art/info + 1 line separator, no border box)
+        render_header(
             &self.model_name,
-            self.state,
-            &self.session_id,
-            self.total_input_tokens,
-            self.total_output_tokens,
-            layout.top_bar,
+            &self.working_dir,
+            layout.header,
             buf,
         );
 
-        // Sidebar placeholder (session panel removed)
+        // Sidebar placeholder
         if let Some(_sidebar_area) = layout.sidebar {
-            // Session panel was removed; sidebar rendering is a no-op for now.
+            // Session panel rendering is a no-op for now.
         }
 
         // Content area with scroll support
@@ -555,8 +560,14 @@ impl App {
         // Status line / spinner
         Widget::render(&self.spinner, layout.status, buf);
 
-        // Input
-        Widget::render(&self.input, layout.input, buf);
+        // Separator above input
+        render_separator(layout.separator_top, buf);
+
+        // Input with ❯ prompt (no border box)
+        render_input_with_prompt(&self.input, layout.input, buf);
+
+        // Separator below input
+        render_separator(layout.separator_bottom, buf);
 
         // Search bar (overlays bottom of content when active)
         if self.search.is_active() {
@@ -569,10 +580,9 @@ impl App {
             search::render_search_bar(&self.search, search_area, buf);
         }
 
-        // Bottom bar (enhanced with sidebar toggle hint)
-        render_bottom_bar_enhanced(
+        // Bottom bar
+        render_bottom_bar(
             self.state,
-            self.sidebar_visible,
             self.search.is_active(),
             layout.bottom_bar,
             buf,
@@ -591,73 +601,170 @@ impl App {
     }
 }
 
-/// Format token count with `k` suffix for large values.
-#[allow(clippy::cast_precision_loss)]
-fn format_tokens(n: u64) -> String {
-    if n >= 10_000 {
-        format!("{:.1}k", n as f64 / 1000.0)
-    } else {
-        n.to_string()
-    }
-}
+/// Terra cotta color (`#DA7756`, same as CC's `clawd_body`).
+const CRAB_COLOR: Color = Color::Rgb(218, 119, 86);
 
-#[allow(clippy::too_many_arguments)]
-fn render_top_bar_enhanced(
+/// Background color for the crab art body (same as CC's `clawd_background`).
+const CRAB_BG: Color = Color::Black;
+
+/// Render the header: crab art (left) + info text (right) + separator.
+///
+/// Matches CC's `CondensedLogo` — no border box, just flat content:
+/// ```text
+///  ╲▐▛█▜▌╱   Crab Code v0.1.0
+///   ▝█████▘  claude-sonnet-4-6
+///    ▝▘ ▘▝   C:\path\to\project
+/// ────────────────────────────────────────
+/// ```
+#[allow(clippy::cast_possible_truncation)]
+fn render_header(
     model_name: &str,
-    state: AppState,
-    session_id: &str,
-    input_tokens: u64,
-    output_tokens: u64,
+    working_dir: &str,
     area: Rect,
     buf: &mut Buffer,
 ) {
-    let state_str = match state {
-        AppState::Idle => "idle",
-        AppState::WaitingForInput => "input",
-        AppState::Processing => "processing",
-        AppState::Confirming => "confirm",
-    };
+    if area.height == 0 || area.width < 10 {
+        return;
+    }
 
-    let mut spans = vec![
-        Span::styled(
-            " crab ",
-            Style::default()
-                .fg(Color::White)
-                .bg(Color::Red)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" "),
-        Span::styled(model_name, Style::default().fg(Color::Cyan)),
-        Span::raw(" | "),
-        Span::styled(state_str, Style::default().fg(Color::Yellow)),
+    let fg = Style::default().fg(CRAB_COLOR);
+    let fg_bg = Style::default().fg(CRAB_COLOR).bg(CRAB_BG);
+
+    // Crab art — 3 rows using block chars (same approach as CC's Clawd).
+    // ╲/╱ = claws, ▐▛█▜▌ = shell with bg color.
+    let art_lines: [Line<'_>; 3] = [
+        Line::from(vec![
+            Span::styled(" ╲", fg),
+            Span::styled("▐▛█▜▌", fg_bg),
+            Span::styled("╱  ", fg),
+        ]),
+        Line::from(vec![
+            Span::styled("  ▝", fg),
+            Span::styled("█████", fg_bg),
+            Span::styled("▘  ", fg),
+        ]),
+        Line::from(Span::styled("   ▝▘ ▘▝   ", fg)),
     ];
 
-    // Session ID (show short version)
-    if !session_id.is_empty() {
-        let short_id = if session_id.len() > 8 {
-            &session_id[..8]
-        } else {
-            session_id
-        };
-        spans.push(Span::raw(" | "));
-        spans.push(Span::styled(short_id, Style::default().fg(Color::DarkGray)));
-    }
+    let art_width = 13u16;
 
-    // Token usage
-    let total = input_tokens + output_tokens;
-    if total > 0 {
-        spans.push(Span::raw(" | "));
-        spans.push(Span::styled(
-            format!(
-                "{}in/{}out",
-                format_tokens(input_tokens),
-                format_tokens(output_tokens)
+    // Info text beside the art (mirrors CC's CondensedLogo text)
+    let text_budget = area.width.saturating_sub(art_width) as usize;
+    let info_lines: [Line<'_>; 3] = [
+        Line::from(vec![
+            Span::styled(
+                "Crab Code",
+                Style::default()
+                    .fg(CRAB_COLOR)
+                    .add_modifier(Modifier::BOLD),
             ),
+            Span::styled(" v0.1.0", Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(Span::styled(
+            model_name,
             Style::default().fg(Color::DarkGray),
-        ));
+        )),
+        Line::from(Span::styled(
+            shorten_path(working_dir, text_budget),
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    for (i, (art_line, info_line)) in art_lines.iter().zip(info_lines.iter()).enumerate() {
+        let y = area.y + i as u16;
+        if y >= area.y + area.height {
+            break;
+        }
+
+        let art_area = Rect {
+            x: area.x,
+            y,
+            width: art_width.min(area.width),
+            height: 1,
+        };
+        Widget::render(art_line.clone(), art_area, buf);
+
+        if area.width > art_width {
+            let info_area = Rect {
+                x: area.x + art_width,
+                y,
+                width: area.width.saturating_sub(art_width),
+                height: 1,
+            };
+            Widget::render(info_line.clone(), info_area, buf);
+        }
     }
 
-    Widget::render(Line::from(spans), area, buf);
+    // Row 4: thin separator ───
+    if area.height >= 4 {
+        render_separator(
+            Rect {
+                x: area.x,
+                y: area.y + 3,
+                width: area.width,
+                height: 1,
+            },
+            buf,
+        );
+    }
+}
+
+/// Shorten a path to fit within `max_chars`.
+fn shorten_path(path: &str, max_chars: usize) -> String {
+    if path.len() <= max_chars || max_chars < 6 {
+        return path.to_string();
+    }
+    let suffix_budget = max_chars.saturating_sub(4);
+    if let Some(pos) = path[path.len().saturating_sub(suffix_budget)..].find(['/', '\\']) {
+        format!("...{}", &path[path.len().saturating_sub(suffix_budget) + pos..])
+    } else {
+        format!("...{}", &path[path.len().saturating_sub(suffix_budget)..])
+    }
+}
+
+/// Render a thin horizontal separator line (`───`).
+#[allow(clippy::cast_possible_truncation)]
+fn render_separator(area: Rect, buf: &mut Buffer) {
+    if area.height == 0 || area.width == 0 {
+        return;
+    }
+    let sep = "─".repeat(area.width as usize);
+    Widget::render(
+        Line::from(Span::styled(&*sep, Style::default().fg(Color::DarkGray))),
+        area,
+        buf,
+    );
+}
+
+/// Render input with `❯` prompt — no border box (matches CC's flat style).
+#[allow(clippy::cast_possible_truncation)]
+fn render_input_with_prompt(input: &InputBox, area: Rect, buf: &mut Buffer) {
+    if area.height == 0 || area.width < 4 {
+        Widget::render(input, area, buf);
+        return;
+    }
+
+    let prompt_span = Span::styled(
+        "❯ ",
+        Style::default()
+            .fg(CRAB_COLOR)
+            .add_modifier(Modifier::BOLD),
+    );
+    let prompt_area = Rect {
+        x: area.x,
+        y: area.y,
+        width: 2,
+        height: 1,
+    };
+    Widget::render(Line::from(prompt_span), prompt_area, buf);
+
+    let input_area = Rect {
+        x: area.x + 2,
+        y: area.y,
+        width: area.width.saturating_sub(2),
+        height: area.height,
+    };
+    Widget::render(input, input_area, buf);
 }
 
 #[allow(clippy::cast_possible_truncation)]
@@ -774,30 +881,29 @@ fn classify_tool_risk(tool_name: &str) -> RiskLevel {
     }
 }
 
-fn render_bottom_bar_enhanced(
+fn render_bottom_bar(
     state: AppState,
-    sidebar_visible: bool,
     search_active: bool,
     area: Rect,
     buf: &mut Buffer,
 ) {
-    let hints = if search_active {
-        "Enter: next match | Esc: close search | type to search"
+    let line = if search_active {
+        Line::from(Span::styled(
+            "Enter: next match | Esc: close | type to search",
+            Style::default().fg(Color::DarkGray),
+        ))
     } else {
         match state {
-            AppState::Idle | AppState::WaitingForInput => {
-                if sidebar_visible {
-                    "Enter: send | Tab: complete | /: search | y: copy | Ctrl+B: sidebar | Ctrl+C: quit"
-                } else {
-                    "Enter: send | Tab: complete | /: search | y: copy | Ctrl+N: new | Ctrl+C: quit"
-                }
-            }
-            AppState::Processing => "Ctrl+C: quit | PageUp/Down: scroll",
-            AppState::Confirming => "y: allow | n: deny | a: always | Esc: deny",
+            AppState::Confirming => Line::from(Span::styled(
+                "y: allow | n: deny | a: always | Esc: deny",
+                Style::default().fg(Color::DarkGray),
+            )),
+            _ => Line::from(Span::styled(
+                "? for shortcuts",
+                Style::default().fg(Color::DarkGray),
+            )),
         }
     };
-
-    let line = Line::from(Span::styled(hints, Style::default().fg(Color::DarkGray)));
     Widget::render(line, area, buf);
 }
 
@@ -1059,6 +1165,7 @@ mod tests {
     #[test]
     fn render_does_not_panic() {
         let mut app = App::new("claude-3.5-sonnet");
+        app.set_working_dir("/home/user/project");
         app.content_buffer = "Hello, world!\nLine 2\n".into();
         app.spinner.start("Thinking...");
 
@@ -1066,10 +1173,11 @@ mod tests {
         let mut buf = Buffer::empty(area);
         app.render(area, &mut buf);
 
-        let top_row: String = (0..area.width)
+        // Header should contain ASCII art crab and "Crab Code"
+        let header_text: String = (0..area.width)
             .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
             .collect();
-        assert!(top_row.contains("crab"));
+        assert!(header_text.contains("/\\_/\\") || header_text.contains("Crab"));
     }
 
     #[test]
@@ -1224,21 +1332,25 @@ mod tests {
     }
 
     #[test]
-    fn render_top_bar_shows_session_id() {
+    fn render_header_shows_model_and_dir() {
         let mut app = App::new("gpt-4o");
-        app.set_session_id("sess_abcdef12345");
-        app.total_input_tokens = 15000;
-        app.total_output_tokens = 3000;
+        app.set_working_dir("/home/user/project");
 
         let area = Rect::new(0, 0, 120, 24);
         let mut buf = Buffer::empty(area);
         app.render(area, &mut buf);
 
-        let top_row: String = (0..area.width)
-            .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
+        // Line 1 should show model name
+        let line1: String = (0..area.width)
+            .map(|x| buf.cell((x, 1)).unwrap().symbol().to_string())
             .collect();
-        assert!(top_row.contains("sess_abc")); // truncated to 8 chars
-        assert!(top_row.contains("15.0k")); // formatted tokens
+        assert!(line1.contains("gpt-4o"));
+
+        // Line 2 should show working dir
+        let line2: String = (0..area.width)
+            .map(|x| buf.cell((x, 2)).unwrap().symbol().to_string())
+            .collect();
+        assert!(line2.contains("project"));
     }
 
     #[test]
@@ -1275,14 +1387,6 @@ mod tests {
         let a = AppAction::SwitchSession("s1".into());
         let b = AppAction::SwitchSession("s1".into());
         assert_eq!(a, b);
-    }
-
-    #[test]
-    fn format_tokens_basic() {
-        assert_eq!(format_tokens(0), "0");
-        assert_eq!(format_tokens(500), "500");
-        assert_eq!(format_tokens(10_000), "10.0k");
-        assert_eq!(format_tokens(150_000), "150.0k");
     }
 
     #[test]

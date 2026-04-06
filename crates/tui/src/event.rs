@@ -1,7 +1,7 @@
 //! TUI event system — merges crossterm terminal events with agent domain events.
 
 use crab_core::event::Event as AgentEvent;
-use crossterm::event::{Event as CtEvent, KeyEvent};
+use crossterm::event::{Event as CtEvent, KeyEvent, KeyEventKind};
 use tokio::sync::mpsc;
 
 /// Events consumed by the TUI main loop.
@@ -36,12 +36,14 @@ pub fn spawn_event_loop(
         let mut reader = crossterm::event::EventStream::new();
         while let Some(Ok(event)) = reader.next().await {
             let tui_event = match event {
-                CtEvent::Key(key) => TuiEvent::Key(key),
+                // Only handle Press events — Windows reports both Press and
+                // Release, which would double every keystroke / IME character.
+                CtEvent::Key(key) if key.kind == KeyEventKind::Press => TuiEvent::Key(key),
                 CtEvent::Resize(w, h) => TuiEvent::Resize {
                     width: w,
                     height: h,
                 },
-                // Ignore mouse, focus, paste events for now
+                // Ignore Key Release/Repeat, mouse, focus, paste events
                 _ => continue,
             };
             if ct_tx.send(tui_event).is_err() {
