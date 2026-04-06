@@ -49,7 +49,10 @@ impl ToolStats {
         if self.call_count == 0 {
             return 0.0;
         }
-        self.success_count as f64 / self.call_count as f64
+        #[allow(clippy::cast_precision_loss)]
+        {
+            self.success_count as f64 / self.call_count as f64
+        }
     }
 
     /// Average duration in milliseconds.
@@ -58,7 +61,10 @@ impl ToolStats {
         if self.call_count == 0 {
             return 0.0;
         }
-        self.total_duration_ms as f64 / self.call_count as f64
+        #[allow(clippy::cast_precision_loss)]
+        {
+            self.total_duration_ms as f64 / self.call_count as f64
+        }
     }
 }
 

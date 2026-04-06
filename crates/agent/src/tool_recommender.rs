@@ -177,6 +177,7 @@ fn history_boost(recent_tools: &[String]) -> HashMap<String, f64> {
     let len = recent_tools.len();
     for (i, name) in recent_tools.iter().enumerate() {
         // More recent → higher boost, max 0.15
+        #[allow(clippy::cast_precision_loss)]
         let recency = (i + 1) as f64 / len.max(1) as f64;
         let b = 0.15 * recency;
         let entry = boost.entry(name.clone()).or_insert(0.0);

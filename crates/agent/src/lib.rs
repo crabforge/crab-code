@@ -2,7 +2,9 @@ pub mod adaptive_prompt;
 pub mod assignment;
 pub mod branch_manager;
 pub mod checkpoint;
+pub mod code_gen;
 pub mod code_nav;
+pub mod code_review;
 pub mod conversation_tree;
 pub mod coordinator;
 pub mod dialogue;
@@ -21,6 +23,7 @@ pub mod repl_commands;
 pub mod retry;
 pub mod rollback;
 pub mod smart_context;
+pub mod snippet_store;
 pub mod summarizer;
 pub mod system_prompt;
 pub mod task;
@@ -39,9 +42,14 @@ pub use adaptive_prompt::{
 pub use assignment::{AssignmentStrategy, CapabilityBased, LeastLoaded, RoundRobin};
 pub use branch_manager::{BranchManager, BranchSummary, BranchTree};
 pub use checkpoint::{CheckpointManager, CheckpointSummary, ConversationSnapshot};
+pub use code_gen::{CodeTemplate, TemplateLibrary};
 pub use code_nav::{
     CodeNavigator, Language, SymbolKind, SymbolLocation, detect_language, find_definitions,
     find_implementations, find_references, format_nav_results,
+};
+pub use code_review::{
+    AutoReviewer, ReviewChecklist, ReviewFinding, ReviewItem, Severity, auto_review,
+    summarize_findings,
 };
 pub use conversation_tree::{Branch, BranchError, BranchId, ConversationNode, ConversationTree};
 pub use coordinator::{AgentCoordinator, AgentHandle, AgentSession, SessionConfig};
@@ -80,6 +88,7 @@ pub use smart_context::{
     build_context_snippets_from_content, extract_query_terms, format_context_section,
     score_file_relevance, smart_context_for_query,
 };
+pub use snippet_store::{Snippet, SnippetStore, search_snippets};
 pub use summarizer::{
     ConversationSummary, SummarizerConfig, SummaryItem, SummaryItemKind, summarize_conversation,
 };

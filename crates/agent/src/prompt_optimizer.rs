@@ -153,6 +153,7 @@ impl PromptOptimizer {
         }
     }
 
+    #[allow(clippy::unused_self)]
     fn evaluate_condition(&self, section: &PromptSection, ctx: &OptimizationContext) -> bool {
         match &section.condition {
             None | Some(SectionCondition::Always) => true,

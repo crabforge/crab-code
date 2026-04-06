@@ -107,6 +107,7 @@ impl TemplateEngine {
         self.render(&tmpl.template, ctx)
     }
 
+    #[allow(clippy::unused_self)]
     fn process_conditionals(&self, input: &str, ctx: &TemplateContext) -> String {
         let mut result = input.to_string();
         // Simple non-nested {{#if var}}...{{/if}}
@@ -133,6 +134,7 @@ impl TemplateEngine {
         result
     }
 
+    #[allow(clippy::unused_self)]
     fn process_unless(&self, input: &str, ctx: &TemplateContext) -> String {
         let mut result = input.to_string();
         while let Some(start) = result.find("{{#unless ") {
@@ -158,6 +160,7 @@ impl TemplateEngine {
         result
     }
 
+    #[allow(clippy::unused_self)]
     fn process_variables(&self, input: &str, ctx: &TemplateContext) -> String {
         let mut result = String::with_capacity(input.len());
         let mut rest = input;
