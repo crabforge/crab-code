@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.svg" width="120" alt="Crab Code Logo" />
+
 # Crab Code
 
 **Open-source alternative to Claude Code, built from scratch in Rust.**
@@ -8,25 +10,28 @@
 
 [![Rust](https://img.shields.io/badge/Built%20with-Rust-orange?logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/crabforge/crab-code/actions/workflows/ci.yml/badge.svg)](https://github.com/crabforge/crab-code/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
+
+**English** | [**中文**](README.zh-CN.md)
 
 </div>
 
 ---
 
-> **Status: Active Development (Phase 2 complete)** -- Full Claude Code feature alignment achieved. 32 built-in tools, 6 permission modes, extended thinking, multi-agent coordination, and 3100+ tests across 16 crates. End-to-end integration testing in progress.
+> **Status: Active Development** -- 32 built-in tools, 6 permission modes, extended thinking, multi-agent coordination, and 3100+ tests across 16 crates.
 
 ## What is Crab Code?
 
 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) pioneered the agentic coding CLI -- an AI that doesn't just suggest code, but thinks, plans, and executes autonomously in your terminal.
 
-**Crab Code** brings this agentic coding experience to the open-source world, independently built from the ground up in Rust:
+**Crab Code** brings this experience to the open-source world, independently built from the ground up in Rust:
 
 - **Fully open source** -- Apache 2.0, no feature-gating, no black box
 - **Rust-native performance** -- instant startup, minimal memory, no Node.js overhead
 - **Model agnostic** -- Claude, GPT, DeepSeek, Qwen, Ollama, or any OpenAI-compatible API
 - **Secure** -- 6 permission modes (default, acceptEdits, dontAsk, bypassPermissions, plan, auto)
-- **MCP compatible** -- stdio, SSE, and WebSocket transports, bridges MCP tools to native tool system
+- **MCP compatible** -- stdio, SSE, and WebSocket transports
 - **Claude Code aligned** -- CLI flags, slash commands, tools, and workflows match Claude Code behavior
 
 ## Quick Start
@@ -49,7 +54,22 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ./target/release/crab -p "fix the bug in main.rs"
 
 # With a specific provider
-./target/release/crab --provider openai --model gpt-4o "fix the bug in main.rs"
+./target/release/crab --provider openai --model gpt-4o "refactor auth module"
+```
+
+### Claude Code Compatible Configuration
+
+Crab Code supports Claude Code's `settings.json` format, including the `env` field:
+
+```json
+// ~/.crab/settings.json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "cr_...",
+    "ANTHROPIC_BASE_URL": "http://your-proxy/api"
+  },
+  "model": "claude-opus-4-6"
+}
 ```
 
 ## Features
@@ -57,7 +77,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ### Core Agent Loop
 
 - **Streaming SSE** -- real-time token-by-token output from LLM APIs
-- **Tool execution cycle** -- model reasoning → tool call → permission check → execute → result → next turn
+- **Tool execution cycle** -- model reasoning -> tool call -> permission check -> execute -> result -> next turn
 - **Extended thinking** -- budget_tokens support for deep reasoning (Anthropic thinking blocks)
 - **Retry + fallback** -- automatic retry on transient errors, model fallback on overload
 - **Effort levels** -- low/medium/high/max mapped to API parameters
@@ -129,10 +149,9 @@ Plus tool-level filtering with `--allowedTools` / `--disallowedTools` supporting
 - ratatui + crossterm terminal UI
 - Markdown rendering with syntax highlighting
 - Vim mode editing
-- Autocomplete for slash commands
+- Autocomplete for slash commands and file paths
 - Permission dialogs
 - Cost tracking status bar
-- Spinner with active task display
 
 ## Architecture
 
@@ -159,8 +178,6 @@ Key design decisions:
 
 ## Configuration
 
-Crab Code uses its own independent configuration paths (not compatible with Claude Code):
-
 ```bash
 # Global config
 ~/.crab/settings.json        # API keys, provider settings, MCP servers
@@ -172,21 +189,6 @@ Crab Code uses its own independent configuration paths (not compatible with Clau
 your-project/CRAB.md         # Project instructions (like CLAUDE.md)
 your-project/.crab/settings.json  # Project-level overrides
 your-project/.crab/skills/   # Project-specific skills
-```
-
-```json
-// ~/.crab/settings.json
-{
-  "apiProvider": "anthropic",
-  "model": "claude-sonnet-4-6",
-  "permissionMode": "default",
-  "mcpServers": {
-    "my-server": {
-      "command": "npx",
-      "args": ["-y", "@my/mcp-server"]
-    }
-  }
-}
 ```
 
 ## CLI Usage
@@ -201,11 +203,8 @@ crab --model opus                 # Model alias (sonnet/opus/haiku)
 crab --permission-mode plan       # Plan mode
 crab --effort high                # Set effort level
 crab --resume <session-id>        # Resume a saved session
-crab --from-pr 123                # Load PR context
 crab doctor                       # Run diagnostics
 crab auth login                   # Configure authentication
-crab update                       # Check for updates
-crab session list                 # List saved sessions
 ```
 
 ## Build & Development
@@ -226,24 +225,21 @@ cargo run --bin crab                       # Run CLI
 | Language | Rust | TypeScript (Bun) | Rust |
 | Model Agnostic | Any provider | Anthropic + AWS/GCP | OpenAI only |
 | Self-hosted | Yes | No | Yes |
-| MCP Support | stdio + SSE + WebSocket | 6 transports | 2 transports |
-| TUI Framework | ratatui | Ink (React) | ratatui |
+| MCP Support | stdio + SSE + WS | 6 transports | 2 transports |
+| TUI | ratatui | Ink (React) | ratatui |
 | Built-in Tools | 32 | 30+ | ~10 |
 | Permission Modes | 6 | 6 | 3 |
 
 ## Contributing
 
-We'd love your help! Crab Code is built independently from scratch.
+We'd love your help! See areas where we need contributions:
 
-```
-Areas we need help with:
-+-- End-to-end integration testing
-+-- OS-level sandboxing (Landlock/Seatbelt/Windows Job Object)
-+-- MCP WebSocket transport testing
-+-- Additional LLM provider testing
-+-- Documentation & i18n
-+-- WASM plugin runtime
-```
+- End-to-end integration testing
+- OS-level sandboxing (Landlock / Seatbelt / Windows Job Object)
+- MCP WebSocket transport testing
+- Additional LLM provider testing
+- Documentation & i18n
+- WASM plugin runtime
 
 ## License
 
