@@ -13,7 +13,6 @@ use crate::components::code_block::{CodeBlockTracker, ImagePlaceholder};
 use crate::components::dialog::{PermissionDialog, PermissionResponse, RiskLevel};
 use crate::components::input::InputBox;
 use crate::components::search::{self, SearchState};
-use crate::components::session_panel::{SessionEntry, SessionPanel};
 use crate::components::spinner::Spinner;
 use crate::components::tool_output::{ToolOutputEntry, ToolOutputList};
 use crate::event::TuiEvent;
@@ -68,8 +67,6 @@ pub struct App {
     pub should_quit: bool,
     /// Name of the tool currently executing (for display).
     current_tool: Option<String>,
-    /// Session sidebar panel.
-    pub session_panel: SessionPanel,
     /// Whether the sidebar is visible.
     pub sidebar_visible: bool,
     /// Current session ID.
@@ -105,7 +102,6 @@ impl App {
             permission_dialog: None,
             should_quit: false,
             current_tool: None,
-            session_panel: SessionPanel::new(),
             sidebar_visible: false,
             session_id: String::new(),
             keybindings: Keybindings::defaults(),
@@ -119,21 +115,14 @@ impl App {
         }
     }
 
-    /// Set the current session ID and update the sidebar.
+    /// Set the current session ID.
     pub fn set_session_id(&mut self, id: impl Into<String>) {
         self.session_id = id.into();
-        self.session_panel.set_active(&self.session_id);
     }
 
     /// Set custom keybindings.
     pub fn set_keybindings(&mut self, keybindings: Keybindings) {
         self.keybindings = keybindings;
-    }
-
-    /// Update the session list in the sidebar.
-    pub fn set_sessions(&mut self, sessions: Vec<SessionEntry>) {
-        self.session_panel.set_sessions(sessions);
-        self.session_panel.set_active(&self.session_id);
     }
 
     /// Handle a TUI event and return an action for the outer loop.
@@ -169,20 +158,7 @@ impl App {
                 Action::NewSession if self.state != AppState::Confirming => {
                     return AppAction::NewSession;
                 }
-                Action::NextSession if self.state != AppState::Confirming => {
-                    self.session_panel.select_next();
-                    if let Some(entry) = self.session_panel.selected_entry() {
-                        let id = entry.id.clone();
-                        return AppAction::SwitchSession(id);
-                    }
-                    return AppAction::None;
-                }
-                Action::PrevSession if self.state != AppState::Confirming => {
-                    self.session_panel.select_prev();
-                    if let Some(entry) = self.session_panel.selected_entry() {
-                        let id = entry.id.clone();
-                        return AppAction::SwitchSession(id);
-                    }
+                Action::NextSession | Action::PrevSession if self.state != AppState::Confirming => {
                     return AppAction::None;
                 }
                 Action::ToggleSidebar => {
@@ -503,9 +479,9 @@ impl App {
             buf,
         );
 
-        // Sidebar (session list)
-        if let Some(sidebar_area) = layout.sidebar {
-            Widget::render(&self.session_panel, sidebar_area, buf);
+        // Sidebar placeholder (session panel removed)
+        if let Some(_sidebar_area) = layout.sidebar {
+            // Session panel was removed; sidebar rendering is a no-op for now.
         }
 
         // Content area with scroll support
@@ -1091,25 +1067,10 @@ mod tests {
     }
 
     #[test]
-    fn set_session_id_updates_panel() {
+    fn set_session_id_updates_field() {
         let mut app = App::new("test");
-        app.set_sessions(vec![
-            SessionEntry::new("s1", "Session 1"),
-            SessionEntry::new("s2", "Session 2"),
-        ]);
         app.set_session_id("s2");
         assert_eq!(app.session_id, "s2");
-    }
-
-    #[test]
-    fn set_sessions_populates_panel() {
-        let mut app = App::new("test");
-        app.set_sessions(vec![
-            SessionEntry::new("s1", "Session 1"),
-            SessionEntry::new("s2", "Session 2"),
-            SessionEntry::new("s3", "Session 3"),
-        ]);
-        assert_eq!(app.session_panel.len(), 3);
     }
 
     #[test]
@@ -1120,32 +1081,6 @@ mod tests {
         // Should not panic
         let action = app.handle_event(ctrl_key('c'));
         assert_eq!(action, AppAction::Quit);
-    }
-
-    #[test]
-    fn render_with_sidebar() {
-        let mut app = App::new("test-model");
-        app.sidebar_visible = true;
-        app.set_sessions(vec![
-            SessionEntry::new("s1", "Session 1").with_active(true),
-            SessionEntry::new("s2", "Session 2"),
-        ]);
-        app.set_session_id("s1");
-        app.content_buffer = "Hello world\n".into();
-
-        let area = Rect::new(0, 0, 120, 30);
-        let mut buf = Buffer::empty(area);
-        app.render(area, &mut buf);
-
-        let buf_ref = &buf;
-        let all_text: String = (0..area.height)
-            .flat_map(|y| {
-                (0..area.width).map(move |x| buf_ref.cell((x, y)).unwrap().symbol().to_string())
-            })
-            .collect();
-        assert!(all_text.contains("Sessions"));
-        assert!(all_text.contains("Session 1"));
-        assert!(all_text.contains("crab"));
     }
 
     #[test]

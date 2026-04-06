@@ -4,7 +4,6 @@ use crab_api::LlmBackend;
 use crab_api::capabilities::StreamingUsage;
 use crab_api::rate_limit::RetryPolicy;
 use crab_api::streaming::StreamingToolParser;
-use crab_api::token_budget::TokenBudget;
 use crab_api::types::{CacheBreakpoint, MessageRequest, StreamEvent};
 use crab_core::event::Event;
 use crab_core::message::{ContentBlock, Message, Role};
@@ -18,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 
 /// Configuration for the query loop.
 #[derive(Clone)]
+#[allow(clippy::pub_underscore_fields)]
 pub struct QueryLoopConfig {
     pub model: ModelId,
     pub max_tokens: u32,
@@ -26,9 +26,8 @@ pub struct QueryLoopConfig {
     pub tool_schemas: Vec<serde_json::Value>,
     /// Whether to enable prompt caching (Anthropic only).
     pub cache_enabled: bool,
-    /// Optional token budget for auto-calculating `max_tokens`.
-    /// When set, overrides the fixed `max_tokens` field.
-    pub token_budget: Option<TokenBudget>,
+    /// Reserved for future token budget integration.
+    pub _token_budget: Option<()>,
     /// Retry policy for API requests. Uses default if `None`.
     pub retry_policy: Option<RetryPolicy>,
 }
@@ -68,15 +67,7 @@ pub async fn query_loop(
             vec![]
         };
 
-        // Calculate max_tokens: use token budget if available, else fixed value
-        let max_tokens = config
-            .token_budget
-            .as_ref()
-            .map_or(config.max_tokens, |budget| {
-                #[allow(clippy::cast_possible_truncation)]
-                let input_tokens = conversation.estimated_tokens() as u32;
-                budget.calculate_max_tokens(input_tokens)
-            });
+        let max_tokens = config.max_tokens;
 
         // Build the API request from conversation state
         let req = MessageRequest {
@@ -605,26 +596,11 @@ mod tests {
             temperature: Some(0.7),
             tool_schemas: vec![],
             cache_enabled: false,
-            token_budget: None,
+            _token_budget: None,
             retry_policy: None,
         };
         assert_eq!(config.model.as_str(), "claude-sonnet-4-20250514");
         assert_eq!(config.max_tokens, 4096);
-    }
-
-    #[test]
-    fn query_loop_config_with_token_budget() {
-        let budget = TokenBudget::new(200_000, 16_000);
-        let config = QueryLoopConfig {
-            model: ModelId::from("claude-sonnet-4-20250514"),
-            max_tokens: 4096,
-            temperature: None,
-            tool_schemas: vec![],
-            cache_enabled: false,
-            token_budget: Some(budget),
-            retry_policy: None,
-        };
-        assert!(config.token_budget.is_some());
     }
 
     #[test]
@@ -636,7 +612,7 @@ mod tests {
             temperature: None,
             tool_schemas: vec![],
             cache_enabled: false,
-            token_budget: None,
+            _token_budget: None,
             retry_policy: Some(policy),
         };
         assert!(config.retry_policy.is_some());

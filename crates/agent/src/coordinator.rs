@@ -14,15 +14,11 @@ use crab_tools::registry::ToolRegistry;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use crate::assignment::AssignmentStrategy;
-use crate::health::{HealthConfig, HealthMonitor};
 use crate::message_bus::{AgentMessage, Envelope, MessageBus};
 use crate::message_router::MessageRouter;
-use crate::metrics::MetricsCollector;
 use crate::query_loop::{self, QueryLoopConfig};
 use crate::retry::{RetryDecision, RetryPolicy, RetryTracker};
-use crate::team::{Capability, Team, TeamMode};
-use crate::work_stealing::WorkStealingScheduler;
+use crate::team::{Team, TeamMode};
 use crate::worker::{AgentWorker, WorkerConfig, WorkerResult};
 
 /// Multi-agent orchestrator. Manages the main agent and worker pool.
@@ -43,16 +39,8 @@ pub struct AgentCoordinator {
     pub router: MessageRouter,
     /// Team structure and collaboration mode.
     pub team: Option<Team>,
-    /// Task assignment strategy.
-    assignment_strategy: Option<Box<dyn AssignmentStrategy>>,
-    /// Agent health monitor.
-    pub health: HealthMonitor,
-    /// Per-agent metrics collector.
-    pub metrics: MetricsCollector,
     /// Retry tracker for failed tasks.
     pub retry_tracker: RetryTracker,
-    /// Work-stealing scheduler.
-    pub scheduler: WorkStealingScheduler,
 }
 
 /// A worker that is currently running.
@@ -102,8 +90,6 @@ pub struct AgentSession {
     pub session_history: Option<SessionHistory>,
     /// Cost accumulator for tracking API usage.
     pub cost: CostAccumulator,
-    /// Conversation tree for branching and rollback support.
-    pub conversation_tree: crate::conversation_tree::ConversationTree,
 }
 
 impl AgentSession {
@@ -163,7 +149,7 @@ impl AgentSession {
             temperature: session_config.temperature,
             tool_schemas,
             cache_enabled: false,
-            token_budget: None,
+            _token_budget: None,
             retry_policy: None,
         };
 
@@ -181,31 +167,11 @@ impl AgentSession {
             memory_store,
             session_history,
             cost: CostAccumulator::default(),
-            conversation_tree: crate::conversation_tree::ConversationTree::new(),
         }
-    }
-
-    /// Try to handle input as a REPL slash command (`/undo`, `/branch`, `/fork`).
-    ///
-    /// Returns `Some(CommandResult)` if the input was a recognized command,
-    /// or `None` if it should be treated as normal user input.
-    pub fn handle_repl_command(
-        &mut self,
-        input: &str,
-    ) -> Option<crate::repl_commands::CommandResult> {
-        let cmd = crate::repl_commands::ReplCommand::parse(input);
-        crate::repl_commands::execute_command(&cmd, &mut self.conversation_tree)
     }
 
     /// Handle user input: add user message, run the query loop, and auto-save.
     pub async fn handle_user_input(&mut self, input: &str) -> crab_common::Result<()> {
-        // Check for REPL commands first — they don't go to the LLM.
-        if self.handle_repl_command(input).is_some() {
-            return Ok(());
-        }
-
-        // Mirror the message into the conversation tree for branching support.
-        self.conversation_tree.push(Message::user(input));
         self.conversation.push(Message::user(input));
 
         let result = query_loop::query_loop(
@@ -332,10 +298,6 @@ impl AgentCoordinator {
         let main_tx = bus.sender();
         let mut router = MessageRouter::new();
         let _main_rx = router.register(&main_name);
-        let mut health = HealthMonitor::with_defaults();
-        health.register(&main_name);
-        let mut scheduler = WorkStealingScheduler::new();
-        scheduler.register(&main_name);
         Self {
             main_agent: AgentHandle {
                 id: main_id,
@@ -349,11 +311,7 @@ impl AgentCoordinator {
             next_worker_id: 1,
             router,
             team: None,
-            assignment_strategy: None,
-            health,
-            metrics: MetricsCollector::new(),
             retry_tracker: RetryTracker::new(RetryPolicy::default()),
-            scheduler,
         }
     }
 
@@ -362,34 +320,10 @@ impl AgentCoordinator {
         self.retry_tracker = RetryTracker::new(policy);
     }
 
-    /// Set a custom health monitor config.
-    pub fn set_health_config(&mut self, config: HealthConfig) {
-        let old_agents: Vec<String> = self.health.unresponsive_agents();
-        let _ = old_agents; // just for reference
-        // Re-create the monitor with new config, re-register all agents
-        let mut new_health = HealthMonitor::new(config);
-        new_health.register(&self.main_agent.name);
-        for worker in &self.workers {
-            new_health.register(&worker.name);
-        }
-        self.health = new_health;
-    }
-
-    /// Record a heartbeat from a worker (call periodically to keep health status current).
-    pub fn worker_heartbeat(&mut self, worker_name: &str) {
-        self.health.heartbeat(worker_name);
-    }
-
-    /// Handle a worker task failure: record metrics and decide on retry.
+    /// Handle a worker task failure: decide on retry.
     ///
     /// Returns `Some(task_id)` if the task should be retried, `None` if exhausted.
-    pub fn on_worker_failure(
-        &mut self,
-        worker_name: &str,
-        task_id: &str,
-        duration: std::time::Duration,
-    ) -> Option<RetryDecision> {
-        self.metrics.record_completion(worker_name, false, duration);
+    pub fn on_worker_failure(&mut self, task_id: &str) -> Option<RetryDecision> {
         let decision = self.retry_tracker.on_failure(task_id);
         match &decision {
             RetryDecision::Retry { .. } => Some(decision),
@@ -397,25 +331,14 @@ impl AgentCoordinator {
         }
     }
 
-    /// Handle a worker task success: record metrics and clear retry state.
-    pub fn on_worker_success(
-        &mut self,
-        worker_name: &str,
-        task_id: &str,
-        duration: std::time::Duration,
-    ) {
-        self.metrics.record_completion(worker_name, true, duration);
+    /// Handle a worker task success: clear retry state.
+    pub fn on_worker_success(&mut self, task_id: &str) {
         self.retry_tracker.on_success(task_id);
     }
 
     /// Set the team structure for this coordinator.
     pub fn set_team(&mut self, team: Team) {
         self.team = Some(team);
-    }
-
-    /// Set the task assignment strategy.
-    pub fn set_assignment_strategy(&mut self, strategy: Box<dyn AssignmentStrategy>) {
-        self.assignment_strategy = Some(strategy);
     }
 
     /// Get the current team mode, if a team is configured.
@@ -441,30 +364,6 @@ impl AgentCoordinator {
             )));
         }
         Ok(self.router.route(envelope).await)
-    }
-
-    /// Assign a task using the configured assignment strategy.
-    ///
-    /// Returns the name of the selected agent, or `None` if no strategy
-    /// is set or no suitable candidate is found.
-    pub fn assign_task(&mut self, required_capability: Option<&Capability>) -> Option<String> {
-        let team = self.team.as_ref()?;
-        let strategy = self.assignment_strategy.as_mut()?;
-
-        // In leader-worker mode, only assign to non-leader members
-        let candidates: Vec<_> = match team.mode {
-            TeamMode::LeaderWorker => team
-                .members
-                .iter()
-                .filter(|m| !m.is_leader)
-                .cloned()
-                .collect(),
-            TeamMode::PeerToPeer => team.members.clone(),
-        };
-
-        strategy
-            .select(&candidates, required_capability)
-            .map(|m| m.name.clone())
     }
 
     /// Add a worker agent handle (for pre-configured workers).
@@ -520,15 +419,13 @@ impl AgentCoordinator {
         self.running
             .insert(worker_id.clone(), RunningWorker { handle, cancel });
 
-        // Also register in the handle list, router, health, and scheduler
+        // Also register in the handle list and router
         self.workers.push(AgentHandle {
             id: worker_id.clone(),
             name: worker_id.clone(),
             tx: self.bus.clone(),
         });
         let _worker_rx = self.router.register(&worker_id);
-        self.health.register(&worker_id);
-        self.scheduler.register(&worker_id);
 
         worker_id
     }
@@ -1330,118 +1227,13 @@ mod tests {
     // ─── Assignment strategy tests ──────────────────────────────────
 
     #[test]
-    fn coordinator_no_strategy_by_default() {
+    fn coordinator_set_retry_policy() {
         let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-        assert!(coord.assign_task(None).is_none());
-    }
+        coord.set_retry_policy(crate::retry::RetryPolicy::no_retry());
 
-    #[test]
-    fn coordinator_round_robin_assignment() {
-        let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-
-        let mut team = Team::new("dev".into());
-        let mut leader = crate::team::TeamMember::new("a0", "Leader", "model");
-        leader.is_leader = true;
-        team.add_member(leader);
-        team.add_member(crate::team::TeamMember::new("a1", "W1", "model"));
-        team.add_member(crate::team::TeamMember::new("a2", "W2", "model"));
-        team.add_member(crate::team::TeamMember::new("a3", "W3", "model"));
-        coord.set_team(team);
-        coord.set_assignment_strategy(Box::new(crate::assignment::RoundRobin::new()));
-
-        // Leader is excluded in LeaderWorker mode
-        assert_eq!(coord.assign_task(None).as_deref(), Some("W1"));
-        assert_eq!(coord.assign_task(None).as_deref(), Some("W2"));
-        assert_eq!(coord.assign_task(None).as_deref(), Some("W3"));
-        assert_eq!(coord.assign_task(None).as_deref(), Some("W1")); // wraps
-    }
-
-    #[test]
-    fn coordinator_capability_based_assignment() {
-        let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-
-        let mut team = Team::new("dev".into());
-        let mut leader = crate::team::TeamMember::new("a0", "Leader", "model");
-        leader.is_leader = true;
-        team.add_member(leader);
-
-        let mut w1 = crate::team::TeamMember::new("a1", "W1", "model");
-        w1.add_capability(Capability::new("testing"));
-        team.add_member(w1);
-
-        let mut w2 = crate::team::TeamMember::new("a2", "W2", "model");
-        w2.add_capability(Capability::new("frontend"));
-        team.add_member(w2);
-
-        coord.set_team(team);
-        coord.set_assignment_strategy(Box::new(crate::assignment::CapabilityBased::new()));
-
-        let cap = Capability::new("frontend");
-        assert_eq!(coord.assign_task(Some(&cap)).as_deref(), Some("W2"));
-
-        let cap = Capability::new("testing");
-        assert_eq!(coord.assign_task(Some(&cap)).as_deref(), Some("W1"));
-    }
-
-    #[test]
-    fn coordinator_assign_no_team_returns_none() {
-        let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-        coord.set_assignment_strategy(Box::new(crate::assignment::RoundRobin::new()));
-        // No team set → None
-        assert!(coord.assign_task(None).is_none());
-    }
-
-    // ─── Health monitor integration ─────────────────────────────────
-
-    #[test]
-    fn coordinator_has_health_monitor() {
-        let coord = AgentCoordinator::new("main".into(), "Main".into());
-        // Main agent is auto-registered
-        assert!(coord.health.check("Main").is_some());
-    }
-
-    #[test]
-    fn coordinator_worker_heartbeat() {
-        let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-        coord.health.register("w1");
-        coord.worker_heartbeat("w1");
-        let h = coord.health.check("w1").unwrap();
-        assert_eq!(h.status, crate::health::HealthStatus::Healthy);
-    }
-
-    #[test]
-    fn coordinator_set_health_config() {
-        let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-        coord.add_worker("w1".into(), "W1".into());
-        coord.health.register("W1");
-
-        coord.set_health_config(crate::health::HealthConfig {
-            heartbeat_interval: std::time::Duration::from_secs(5),
-            degraded_threshold: 1,
-            unresponsive_threshold: 3,
-        });
-
-        // Both main and W1 should be re-registered
-        assert!(coord.health.check("Main").is_some());
-        assert!(coord.health.check("W1").is_some());
-    }
-
-    // ─── Metrics integration ────────────────────────────────────────
-
-    #[test]
-    fn coordinator_has_metrics() {
-        let coord = AgentCoordinator::new("main".into(), "Main".into());
-        assert!(coord.metrics.all().is_empty()); // no tasks yet
-    }
-
-    #[test]
-    fn coordinator_on_worker_success() {
-        let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-        coord.on_worker_success("w1", "t1", std::time::Duration::from_secs(5));
-
-        let m = coord.metrics.get("w1").unwrap();
-        assert_eq!(m.tasks_succeeded, 1);
-        assert_eq!(m.tasks_failed, 0);
+        // First failure should give up immediately
+        let decision = coord.on_worker_failure("t1");
+        assert!(decision.is_none());
     }
 
     #[test]
@@ -1449,91 +1241,25 @@ mod tests {
         let mut coord = AgentCoordinator::new("main".into(), "Main".into());
         // Default policy: 2 retries
 
-        let decision = coord.on_worker_failure("w1", "t1", std::time::Duration::from_secs(1));
-        assert!(decision.is_some()); // should retry (attempt 1)
+        let decision = coord.on_worker_failure("t1");
+        assert!(decision.is_some());
         assert!(matches!(decision, Some(RetryDecision::Retry { .. })));
 
-        let decision = coord.on_worker_failure("w1", "t1", std::time::Duration::from_secs(1));
-        assert!(decision.is_some()); // should retry (attempt 2)
+        let decision = coord.on_worker_failure("t1");
+        assert!(decision.is_some());
 
-        let decision = coord.on_worker_failure("w1", "t1", std::time::Duration::from_secs(1));
-        assert!(decision.is_none()); // exhausted (attempt 3 > max_retries=2)
-
-        let m = coord.metrics.get("w1").unwrap();
-        assert_eq!(m.tasks_failed, 3);
-    }
-
-    #[test]
-    fn coordinator_set_retry_policy() {
-        let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-        coord.set_retry_policy(crate::retry::RetryPolicy::no_retry());
-
-        // First failure should give up immediately
-        let decision = coord.on_worker_failure("w1", "t1", std::time::Duration::from_secs(1));
-        assert!(decision.is_none());
+        let decision = coord.on_worker_failure("t1");
+        assert!(decision.is_none()); // exhausted
     }
 
     #[test]
     fn coordinator_success_clears_retry_state() {
         let mut coord = AgentCoordinator::new("main".into(), "Main".into());
 
-        // Fail once
-        coord.on_worker_failure("w1", "t1", std::time::Duration::from_secs(1));
+        coord.on_worker_failure("t1");
         assert_eq!(coord.retry_tracker.attempts_for("t1"), 1);
 
-        // Succeed — clears retry state
-        coord.on_worker_success("w1", "t1", std::time::Duration::from_secs(1));
+        coord.on_worker_success("t1");
         assert_eq!(coord.retry_tracker.attempts_for("t1"), 0);
-    }
-
-    // ─── Work-stealing scheduler integration ────────────────────────
-
-    #[test]
-    fn coordinator_has_scheduler() {
-        let coord = AgentCoordinator::new("main".into(), "Main".into());
-        // Main is auto-registered in the scheduler
-        assert_eq!(coord.scheduler.agent_count(), 1);
-    }
-
-    #[test]
-    fn coordinator_scheduler_enqueue_dequeue() {
-        let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-        coord.scheduler.register("w1");
-
-        let task = crate::work_stealing::QueuedTask {
-            task_id: "t1".into(),
-            prompt: "do stuff".into(),
-            required_capability: None,
-        };
-        assert!(coord.scheduler.enqueue("w1", task));
-        assert_eq!(coord.scheduler.queue_depth("w1"), 1);
-
-        let dequeued = coord.scheduler.dequeue("w1").unwrap();
-        assert_eq!(dequeued.task_id, "t1");
-    }
-
-    #[test]
-    fn coordinator_scheduler_steal() {
-        let mut coord = AgentCoordinator::new("main".into(), "Main".into());
-        coord.scheduler.register("busy");
-        coord.scheduler.register("idle");
-
-        // Load busy agent with tasks
-        for i in 0..5 {
-            coord.scheduler.enqueue(
-                "busy",
-                crate::work_stealing::QueuedTask {
-                    task_id: format!("t{i}"),
-                    prompt: format!("task {i}"),
-                    required_capability: None,
-                },
-            );
-        }
-
-        // idle steals from busy
-        let (victim, stolen) = coord.scheduler.steal("idle").unwrap();
-        assert_eq!(victim, "busy");
-        assert_eq!(stolen.task_id, "t4"); // steals from back
-        assert_eq!(coord.scheduler.queue_depth("busy"), 4);
     }
 }

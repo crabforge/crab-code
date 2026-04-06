@@ -16,7 +16,6 @@ serde_json.workspace = true
 portable-pty = { workspace = true, optional = true }
 
 [dev-dependencies]
-tempfile.workspace = true
 
 [features]
 default = []

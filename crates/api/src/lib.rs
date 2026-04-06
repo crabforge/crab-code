@@ -4,35 +4,18 @@
 //! (Chat Completions) — dispatched via the `LlmBackend` enum.
 //! No dynamic trait dispatch; compile-time determined, exhaustive match.
 
-pub mod ab_compare;
 pub mod anthropic;
-pub mod batch;
 pub mod cache;
 pub mod capabilities;
 pub mod context_optimizer;
-pub mod cost_optimizer;
-pub mod dedup;
-pub mod degradation;
 pub mod error;
 pub mod error_classifier;
 pub mod fallback;
-pub mod middleware;
-pub mod model_selector;
 pub mod openai;
-pub mod output_format;
-pub mod parallel;
-pub mod provider_health;
-pub mod provider_router;
 pub mod rate_limit;
-pub mod response_cache;
-pub mod response_scorer;
 pub mod retry_strategy;
-pub mod stream_aggregator;
 pub mod streaming;
-pub mod token_budget;
-pub mod token_limiter;
 pub mod types;
-pub mod usage_stats;
 
 #[cfg(feature = "bedrock")]
 pub mod bedrock;

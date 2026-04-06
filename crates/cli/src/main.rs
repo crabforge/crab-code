@@ -1,16 +1,16 @@
 mod commands;
-mod completions;
-mod json_output;
-mod output;
 mod setup;
 
+use std::fmt;
 use std::io::Write;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use clap::{Parser, Subcommand};
-use clap_complete::Shell;
+use owo_colors::OwoColorize;
+use serde_json::{Value, json};
 
 use crab_agent::{AgentSession, SessionConfig, build_system_prompt};
 use crab_core::event::Event;
@@ -74,14 +74,6 @@ enum CliCommand {
         #[command(subcommand)]
         action: commands::config::ConfigAction,
     },
-    /// Initialize a new project from a template
-    Init(commands::init::InitArgs),
-    /// Generate shell completion scripts
-    Completions {
-        /// Shell to generate completions for (bash, zsh, fish, powershell)
-        #[arg(value_enum)]
-        shell: Shell,
-    },
 }
 
 /// Session management actions.
@@ -130,12 +122,7 @@ fn main() -> anyhow::Result<()> {
     // Handle subcommands
     if let Some(command) = &cli.command {
         return match command {
-            CliCommand::Completions { shell } => {
-                completions::generate_completions(*shell);
-                Ok(())
-            }
             CliCommand::Config { action } => commands::config::run(action),
-            CliCommand::Init(args) => commands::init::run(args),
             CliCommand::Serve(args) => {
                 let rt = tokio::runtime::Runtime::new()?;
                 rt.block_on(commands::serve::run(args))
@@ -255,7 +242,7 @@ async fn run(cli: &Cli, resume_session_id: Option<String>) -> anyhow::Result<()>
         resume_session_id,
     };
 
-    output::banner(
+    print_banner(
         env!("CARGO_PKG_VERSION"),
         &provider,
         &model_id,
@@ -465,19 +452,20 @@ fn take_event_rx(session: &mut AgentSession) -> mpsc::Receiver<Event> {
 /// Otherwise uses colored human-readable output.
 async fn print_events(mut rx: mpsc::Receiver<Event>, json_mode: bool) {
     let mut stdout = std::io::stdout();
-    let mut spinner: Option<output::Spinner> = None;
+    let mut spinner: Option<Spinner> = None;
 
     while let Some(event) = rx.recv().await {
         if json_mode {
-            if let Some(value) = json_output::event_to_json(&event) {
-                json_output::print_json_line(&value);
+            if let Some(value) = event_to_json(&event)
+                && let Ok(line) = serde_json::to_string(&value)
+            {
+                println!("{line}");
             }
             continue;
         }
 
         match event {
             Event::ContentDelta { delta, .. } => {
-                // Stop spinner when content starts streaming
                 if let Some(mut s) = spinner.take() {
                     s.stop();
                 }
@@ -485,40 +473,169 @@ async fn print_events(mut rx: mpsc::Receiver<Event>, json_mode: bool) {
                 let _ = stdout.flush();
             }
             Event::ToolUseStart { name, .. } => {
-                // Stop any previous spinner before starting a new one
                 if let Some(mut s) = spinner.take() {
                     s.stop();
                 }
-                output::tool_use(&name);
-                spinner = Some(output::Spinner::start(&format!("running {name}...")));
+                eprintln!("{} {}", "tool:".cyan().bold(), name.cyan());
+                spinner = Some(Spinner::start(&format!("running {name}...")));
             }
             Event::ToolResult { id: _, output: o } => {
                 if let Some(mut s) = spinner.take() {
                     s.stop();
                 }
-                output::tool_result(&o.text(), o.is_error);
+                let text = o.text();
+                if o.is_error {
+                    eprintln!("{} {text}", "tool error:".red().bold());
+                } else {
+                    let display = if text.len() > 500 {
+                        format!("{}...", &text[..500])
+                    } else {
+                        text
+                    };
+                    eprintln!("{} {display}", "result:".dimmed());
+                }
             }
             Event::Error { message } => {
-                output::error(&message);
+                eprintln!("{} {message}", "error:".red().bold());
             }
             Event::TokenWarning {
                 usage_pct,
                 used,
                 limit,
             } => {
-                output::token_warning(usage_pct, used, limit);
+                eprintln!(
+                    "{} Token usage {:.0}% ({used}/{limit})",
+                    "warn:".yellow().bold(),
+                    usage_pct * 100.0,
+                );
             }
             Event::CompactStart { strategy, .. } => {
-                output::compact_start(&strategy);
+                eprintln!(
+                    "{} Starting compaction: {strategy}",
+                    "compact:".magenta().bold()
+                );
             }
             Event::CompactEnd {
                 after_tokens,
                 removed_messages,
             } => {
-                output::compact_end(removed_messages, after_tokens);
+                eprintln!(
+                    "{} removed {removed_messages} messages, now {after_tokens} tokens",
+                    "compact:".magenta().bold()
+                );
             }
             _ => {}
         }
+    }
+}
+
+// ─── Inlined output helpers ──────────────────────────────────────
+
+fn print_banner(version: &str, provider: &str, model: &str, permission_mode: &impl fmt::Display) {
+    eprintln!(
+        "{} {} {} provider={} model={} permissions={}",
+        "crab-code".green().bold(),
+        version.dimmed(),
+        "|".dimmed(),
+        provider.cyan(),
+        model.cyan(),
+        format!("{permission_mode}").yellow(),
+    );
+}
+
+struct Spinner {
+    running: Arc<AtomicBool>,
+    handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Spinner {
+    fn start(message: &str) -> Self {
+        let running = Arc::new(AtomicBool::new(true));
+        let running_clone = Arc::clone(&running);
+        let msg = message.to_string();
+
+        let handle = std::thread::spawn(move || {
+            let frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            let mut i = 0;
+            while running_clone.load(Ordering::Relaxed) {
+                eprint!(
+                    "\r{} {}",
+                    frames[i % frames.len()].to_string().cyan(),
+                    msg.dimmed()
+                );
+                let _ = std::io::stderr().flush();
+                std::thread::sleep(std::time::Duration::from_millis(80));
+                i += 1;
+            }
+            eprint!("\r{}\r", " ".repeat(msg.len() + 4));
+            let _ = std::io::stderr().flush();
+        });
+
+        Self {
+            running,
+            handle: Some(handle),
+        }
+    }
+
+    fn stop(&mut self) {
+        self.running.store(false, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl Drop for Spinner {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+fn event_to_json(event: &Event) -> Option<Value> {
+    match event {
+        Event::ContentDelta { index, delta } => Some(json!({
+            "type": "content_delta",
+            "index": index,
+            "delta": delta,
+        })),
+        Event::ToolUseStart { name, id } => Some(json!({
+            "type": "tool_use_start",
+            "tool": name,
+            "id": id,
+        })),
+        Event::ToolResult { id, output } => Some(json!({
+            "type": "tool_result",
+            "id": id,
+            "is_error": output.is_error,
+            "text": output.text(),
+        })),
+        Event::Error { message } => Some(json!({
+            "type": "error",
+            "message": message,
+        })),
+        Event::TokenWarning {
+            usage_pct,
+            used,
+            limit,
+        } => Some(json!({
+            "type": "token_warning",
+            "usage_pct": usage_pct,
+            "used": used,
+            "limit": limit,
+        })),
+        Event::CompactStart { strategy, .. } => Some(json!({
+            "type": "compact_start",
+            "strategy": strategy,
+        })),
+        Event::CompactEnd {
+            after_tokens,
+            removed_messages,
+        } => Some(json!({
+            "type": "compact_end",
+            "after_tokens": after_tokens,
+            "removed_messages": removed_messages,
+        })),
+        _ => None,
     }
 }
 
@@ -603,22 +720,5 @@ mod tests {
     fn cli_json_defaults_to_false() {
         let cli = Cli::try_parse_from(["crab", "hello"]).unwrap();
         assert!(!cli.json);
-    }
-
-    #[test]
-    fn cli_parses_completions_subcommand() {
-        let cli = Cli::try_parse_from(["crab", "completions", "bash"]).unwrap();
-        assert!(matches!(
-            cli.command,
-            Some(CliCommand::Completions { shell: Shell::Bash })
-        ));
-    }
-
-    #[test]
-    fn cli_completions_all_shells() {
-        for shell in ["bash", "zsh", "fish", "powershell"] {
-            let cli = Cli::try_parse_from(["crab", "completions", shell]).unwrap();
-            assert!(matches!(cli.command, Some(CliCommand::Completions { .. })));
-        }
     }
 }

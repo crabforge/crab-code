@@ -116,7 +116,7 @@ pub async fn run(config: TuiConfig) -> anyhow::Result<()> {
         temperature: config.session_config.temperature,
         tool_schemas,
         cache_enabled: false,
-        token_budget: None,
+        _token_budget: None,
         retry_policy: None,
     };
 
@@ -357,7 +357,7 @@ async fn run_loop(
                         temperature: task_temperature,
                         tool_schemas: task_schemas,
                         cache_enabled: task_cache,
-                        token_budget: None,
+                        _token_budget: None,
                         retry_policy: None,
                     };
 

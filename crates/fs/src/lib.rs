@@ -1,16 +1,7 @@
-pub mod content_cache;
 pub mod diff;
-pub mod encoding;
-pub mod file_stats;
-pub mod filetype;
 pub mod gitignore;
 pub mod glob;
 pub mod grep;
-pub mod incremental_hash;
-pub mod index;
-pub mod line_ending;
 pub mod lock;
-pub mod project_detect;
 pub mod symlink;
-pub mod template;
 pub mod watch;

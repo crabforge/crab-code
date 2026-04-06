@@ -490,7 +490,7 @@ fn query_loop_config_is_cloneable() {
         temperature: Some(0.5),
         tool_schemas: vec![serde_json::json!({"name": "test"})],
         cache_enabled: true,
-        token_budget: None,
+        _token_budget: None,
         retry_policy: None,
     };
     let cloned = config.clone();

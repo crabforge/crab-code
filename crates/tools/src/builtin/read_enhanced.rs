@@ -247,7 +247,7 @@ pub fn binary_file_message(path: &Path, kind: &ContentKind) -> String {
             format!(
                 "Binary file: {}\nDetected as: {reason}\n\
                  This file cannot be displayed as text. \
-                 Use file_type or image_read for more details.",
+                 Use image_read for more details.",
                 path.display()
             )
         }

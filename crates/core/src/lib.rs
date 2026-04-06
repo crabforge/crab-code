@@ -2,8 +2,6 @@ pub mod capability;
 pub mod config;
 pub mod conversation;
 pub mod event;
-pub mod event_bus;
-pub mod event_filter;
 pub mod message;
 pub mod model;
 pub mod permission;
