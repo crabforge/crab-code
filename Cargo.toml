@@ -23,7 +23,7 @@ futures = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yml = "0.0.12"
-toml = "1.1.2+spec-1.1.0"
+toml = "1.1.2"
 
 # ─── CLI ───
 clap = { version = "4", features = ["derive"] }
@@ -86,11 +86,11 @@ portable-pty = "0.9"
 
 # ─── 编码与加密 ───
 base64 = "0.22"
-sha2 = "0.10"
-rand = "0.9"
+sha2 = "0.11"
+rand = "0.10"
 
 # ─── PDF ───
-pdf-extract = "0.7"
+pdf-extract = "0.10"
 
 # ─── 版本管理 ───
 semver = "1"
@@ -98,7 +98,7 @@ semver = "1"
 # ─── 杂项 ───
 uuid = { version = "1", features = ["v4"] }
 ulid = "1"
-lru = "0.12"
+lru = "0.16"
 unicode-width = "0.2"
 strip-ansi-escapes = "0.2"
 jsonc-parser = { version = "0.32", features = ["serde"] }
