@@ -1,3 +1,6 @@
+pub mod command_alias;
+pub mod command_history;
+pub mod command_suggest;
 pub mod progress;
 pub mod sandbox;
 pub mod signal;

@@ -12,10 +12,11 @@ crab-common.workspace = true
 tokio.workspace = true
 sysinfo.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 portable-pty = { workspace = true, optional = true }
 
 [dev-dependencies]
-serde_json.workspace = true
+tempfile.workspace = true
 
 [features]
 default = []
