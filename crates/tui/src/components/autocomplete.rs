@@ -85,14 +85,14 @@ impl AutoComplete {
             .map_or(0, |i| i + 1);
         let token = &before_cursor[token_start..];
 
-        if token.starts_with('/') && !token.contains(std::path::MAIN_SEPARATOR)
-            || (token.starts_with('/') && cfg!(windows))
+        // Slash command: starts with `/` and the rest is purely alphabetic
+        // (no further `/` or `\` which would indicate a file path).
+        if token.starts_with('/')
+            && !token[1..].contains('/')
+            && !token[1..].contains('\\')
+            && token[1..].chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         {
-            // On non-Windows, `/` followed by no path separator is a slash command.
-            // On Windows, `/` is always a slash command (paths use `\`).
-            if !token.contains('\\') && (cfg!(windows) || !token[1..].contains('/')) {
-                return CompletionContext::SlashCommand;
-            }
+            return CompletionContext::SlashCommand;
         }
 
         // Check if the token looks like a file path

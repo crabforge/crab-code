@@ -421,11 +421,19 @@ mod tests {
         };
         let out = run(opts).await.unwrap();
         assert_eq!(out.exit_code, 0);
-        // The output should contain the temp dir path
-        let expected = crab_common::path::normalize(&tmp)
+        // Both paths must be canonicalized to compare reliably on CI
+        // (short vs long paths, symlinks, etc.)
+        let actual_path = std::path::PathBuf::from(out.stdout.trim());
+        let actual_norm = crab_common::path::normalize(&actual_path)
             .to_string_lossy()
             .to_lowercase();
-        assert!(out.stdout.trim().to_lowercase().contains(&expected));
+        let expected_norm = crab_common::path::normalize(&tmp)
+            .to_string_lossy()
+            .to_lowercase();
+        assert!(
+            actual_norm.contains(&expected_norm) || expected_norm.contains(&actual_norm),
+            "working dir mismatch: actual={actual_norm}, expected={expected_norm}"
+        );
     }
 
     #[tokio::test]

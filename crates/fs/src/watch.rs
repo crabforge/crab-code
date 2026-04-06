@@ -488,8 +488,11 @@ mod tests {
     #[test]
     fn poll_timeout_returns_none_when_no_events() {
         let dir = tempfile::tempdir().unwrap();
+        // Brief pause to let any spurious events from tempdir creation settle
+        // (macOS FSEvents / kqueue can fire on dir creation).
+        std::thread::sleep(Duration::from_millis(100));
         let watcher = FileWatcher::new(dir.path()).unwrap();
-        let result = watcher.poll_timeout(Duration::from_millis(50));
+        let result = watcher.poll_timeout(Duration::from_millis(100));
         assert!(result.is_none());
     }
 
