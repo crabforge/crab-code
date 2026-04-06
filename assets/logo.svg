@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="w-full fill-current">
-  <!-- V1: Organic — current design, Claude-style brushstrokes forming crab -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- V1: Organic — Claude-style brushstrokes forming crab, terra cotta -->
+  <g fill="#DA7756">
   <path d="M30 38 C26 35, 18 28, 12 24 C9 22, 5 21, 3 23 C1 25, 2 28, 5 29 C8 30, 14 32, 20 35 C24 37, 27 38, 30 38Z"/>
   <path d="M30 40 C25 40, 16 38, 10 35 C7 33, 3 33, 2 35 C1 37, 3 40, 6 40 C10 40, 18 41, 24 41 C27 41, 29 41, 30 40Z"/>
   <path d="M70 38 C74 35, 82 28, 88 24 C91 22, 95 21, 97 23 C99 25, 98 28, 95 29 C92 30, 86 32, 80 35 C76 37, 73 38, 70 38Z"/>
@@ -15,4 +16,5 @@
   <path d="M68 50 C73 54, 81 59, 86 62 C89 64, 91 63, 91 61 C91 59, 88 57, 85 55 C80 52, 73 49, 68 48Z"/>
   <path d="M70 55 C75 60, 83 68, 88 73 C90 76, 92 75, 92 73 C92 71, 89 67, 86 63 C81 57, 74 53, 70 52Z"/>
   <path d="M67 59 C71 65, 77 74, 81 80 C83 83, 85 83, 85 80 C85 78, 82 73, 79 68 C75 62, 70 58, 67 57Z"/>
+  </g>
 </svg>

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.svg" width="120" alt="Crab Code Logo" />
+<img src="assets/logo-horizontal.svg" width="360" alt="Crab Code" />
 
 # Crab Code
 
