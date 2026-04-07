@@ -22,7 +22,8 @@ impl ToolRegistry {
 
     /// Register a tool. Overwrites any existing tool with the same name.
     pub fn register(&mut self, tool: Arc<dyn Tool>) {
-        self.tools.insert(tool.name().to_string(), tool);
+        let canonical_name = tool.name().to_string();
+        self.tools.insert(canonical_name, tool);
     }
 
     /// Look up a tool by name.
@@ -89,7 +90,7 @@ impl ToolRegistry {
     pub fn tool_schemas_filtered(&self, names: &[&str]) -> Vec<serde_json::Value> {
         names
             .iter()
-            .filter_map(|name| self.tools.get(*name))
+            .filter_map(|name| self.get(name))
             .map(|t| {
                 serde_json::json!({
                     "name": t.name(),

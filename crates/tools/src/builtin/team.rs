@@ -4,6 +4,10 @@ use serde_json::Value;
 use std::future::Future;
 use std::pin::Pin;
 
+pub const TEAM_CREATE_TOOL_NAME: &str = "TeamCreate";
+pub const TEAM_DELETE_TOOL_NAME: &str = "TeamDelete";
+pub const SEND_MESSAGE_TOOL_NAME: &str = "SendMessage";
+
 // ─── TeamCreateTool ───
 
 /// Create a new team for multi-agent collaboration.
@@ -14,7 +18,7 @@ pub struct TeamCreateTool;
 
 impl Tool for TeamCreateTool {
     fn name(&self) -> &'static str {
-        "team_create"
+        TEAM_CREATE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -99,7 +103,7 @@ pub struct TeamDeleteTool;
 
 impl Tool for TeamDeleteTool {
     fn name(&self) -> &'static str {
-        "team_delete"
+        TEAM_DELETE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -156,7 +160,7 @@ pub struct SendMessageTool;
 
 impl Tool for SendMessageTool {
     fn name(&self) -> &'static str {
-        "send_message"
+        SEND_MESSAGE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -257,7 +261,7 @@ mod tests {
     #[test]
     fn team_create_metadata() {
         let tool = TeamCreateTool;
-        assert_eq!(tool.name(), "team_create");
+        assert_eq!(tool.name(), "TeamCreate");
         assert!(tool.requires_confirmation());
         assert!(!tool.is_read_only());
     }
@@ -340,7 +344,7 @@ mod tests {
     #[test]
     fn team_delete_metadata() {
         let tool = TeamDeleteTool;
-        assert_eq!(tool.name(), "team_delete");
+        assert_eq!(tool.name(), "TeamDelete");
         assert!(tool.requires_confirmation());
         assert!(!tool.is_read_only());
     }
@@ -391,7 +395,7 @@ mod tests {
     #[test]
     fn send_message_metadata() {
         let tool = SendMessageTool;
-        assert_eq!(tool.name(), "send_message");
+        assert_eq!(tool.name(), "SendMessage");
         assert!(!tool.requires_confirmation());
         assert!(!tool.is_read_only());
     }

@@ -11,11 +11,13 @@ use serde_json::Value;
 ///
 /// Prefers `pwsh` (`PowerShell` 7+) when available, falls back to
 /// `powershell.exe` (Windows `PowerShell` 5.1).
+pub const POWERSHELL_TOOL_NAME: &str = "PowerShell";
+
 pub struct PowerShellTool;
 
 impl Tool for PowerShellTool {
     fn name(&self) -> &'static str {
-        "powershell"
+        POWERSHELL_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -167,7 +169,7 @@ mod tests {
 
     #[test]
     fn tool_name_is_powershell() {
-        assert_eq!(PowerShellTool.name(), "powershell");
+        assert_eq!(PowerShellTool.name(), "PowerShell");
     }
 
     #[test]

@@ -11,6 +11,9 @@ use std::fmt::Write;
 use std::future::Future;
 use std::pin::Pin;
 
+pub const ENTER_PLAN_MODE_TOOL_NAME: &str = "EnterPlanMode";
+pub const EXIT_PLAN_MODE_TOOL_NAME: &str = "ExitPlanMode";
+
 use super::plan_file::{self, PlanFile};
 
 /// Tracks plan execution progress alongside the plan mode tool.
@@ -67,7 +70,7 @@ pub struct EnterPlanModeTool;
 
 impl Tool for EnterPlanModeTool {
     fn name(&self) -> &'static str {
-        "enter_plan_mode"
+        ENTER_PLAN_MODE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -162,7 +165,7 @@ pub struct ExitPlanModeTool;
 
 impl Tool for ExitPlanModeTool {
     fn name(&self) -> &'static str {
-        "exit_plan_mode"
+        EXIT_PLAN_MODE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -378,7 +381,7 @@ mod tests {
     #[test]
     fn tool_metadata() {
         let tool = EnterPlanModeTool;
-        assert_eq!(tool.name(), "enter_plan_mode");
+        assert_eq!(tool.name(), "EnterPlanMode");
         assert!(tool.is_read_only());
         assert!(!tool.description().is_empty());
     }
@@ -474,7 +477,7 @@ mod tests {
     #[test]
     fn exit_plan_mode_metadata() {
         let tool = ExitPlanModeTool;
-        assert_eq!(tool.name(), "exit_plan_mode");
+        assert_eq!(tool.name(), "ExitPlanMode");
         assert!(tool.is_read_only());
         assert!(!tool.description().is_empty());
     }

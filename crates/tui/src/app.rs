@@ -9,6 +9,11 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 
+use crab_tools::builtin::bash::BASH_TOOL_NAME;
+use crab_tools::builtin::edit::EDIT_TOOL_NAME;
+use crab_tools::builtin::notebook::NOTEBOOK_EDIT_TOOL_NAME;
+use crab_tools::builtin::write::WRITE_TOOL_NAME;
+
 use crate::components::autocomplete::{AutoComplete, CommandInfo};
 use crate::components::code_block::{CodeBlockTracker, ImagePlaceholder};
 use crate::components::dialog::{PermissionDialog, PermissionResponse, RiskLevel};
@@ -859,8 +864,8 @@ fn render_autocomplete_popup(ac: &AutoComplete, input_area: Rect, buf: &mut Buff
 /// Classify tool risk level based on tool name for the permission dialog.
 fn classify_tool_risk(tool_name: &str) -> RiskLevel {
     match tool_name {
-        "bash" | "write" | "notebook_edit" => RiskLevel::High,
-        "edit" | "multi_edit" => RiskLevel::Medium,
+        BASH_TOOL_NAME | WRITE_TOOL_NAME | NOTEBOOK_EDIT_TOOL_NAME => RiskLevel::High,
+        EDIT_TOOL_NAME => RiskLevel::Medium,
         _ => RiskLevel::Low,
     }
 }
@@ -1231,11 +1236,17 @@ mod tests {
 
     #[test]
     fn classify_tool_risk_levels() {
-        assert_eq!(classify_tool_risk("bash"), RiskLevel::High);
-        assert_eq!(classify_tool_risk("write"), RiskLevel::High);
-        assert_eq!(classify_tool_risk("edit"), RiskLevel::Medium);
-        assert_eq!(classify_tool_risk("read"), RiskLevel::Low);
-        assert_eq!(classify_tool_risk("glob"), RiskLevel::Low);
+        assert_eq!(classify_tool_risk(BASH_TOOL_NAME), RiskLevel::High);
+        assert_eq!(classify_tool_risk(WRITE_TOOL_NAME), RiskLevel::High);
+        assert_eq!(classify_tool_risk(EDIT_TOOL_NAME), RiskLevel::Medium);
+        assert_eq!(
+            classify_tool_risk(crab_tools::builtin::read::READ_TOOL_NAME),
+            RiskLevel::Low
+        );
+        assert_eq!(
+            classify_tool_risk(crab_tools::builtin::glob::GLOB_TOOL_NAME),
+            RiskLevel::Low
+        );
     }
 
     #[test]

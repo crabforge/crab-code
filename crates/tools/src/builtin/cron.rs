@@ -6,6 +6,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
+pub const CRON_CREATE_TOOL_NAME: &str = "CronCreate";
+pub const CRON_DELETE_TOOL_NAME: &str = "CronDelete";
+pub const CRON_LIST_TOOL_NAME: &str = "CronList";
+
 // ── Cron data model ────────────────────────────────────────────────────
 
 /// A scheduled cron job.
@@ -101,7 +105,7 @@ impl CronCreateTool {
 
 impl Tool for CronCreateTool {
     fn name(&self) -> &'static str {
-        "cron_create"
+        CRON_CREATE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -220,7 +224,7 @@ impl CronDeleteTool {
 
 impl Tool for CronDeleteTool {
     fn name(&self) -> &'static str {
-        "cron_delete"
+        CRON_DELETE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -288,7 +292,7 @@ impl CronListTool {
 
 impl Tool for CronListTool {
     fn name(&self) -> &'static str {
-        "cron_list"
+        CRON_LIST_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -436,7 +440,7 @@ mod tests {
     fn cron_create_metadata() {
         let store = shared_cron_store();
         let tool = CronCreateTool::new(store);
-        assert_eq!(tool.name(), "cron_create");
+        assert_eq!(tool.name(), "CronCreate");
         assert!(!tool.requires_confirmation());
         assert!(!tool.is_read_only());
     }
@@ -562,7 +566,7 @@ mod tests {
     fn cron_delete_metadata() {
         let store = shared_cron_store();
         let tool = CronDeleteTool::new(store);
-        assert_eq!(tool.name(), "cron_delete");
+        assert_eq!(tool.name(), "CronDelete");
         assert!(!tool.requires_confirmation());
     }
 
@@ -618,7 +622,7 @@ mod tests {
     fn cron_list_metadata() {
         let store = shared_cron_store();
         let tool = CronListTool::new(store);
-        assert_eq!(tool.name(), "cron_list");
+        assert_eq!(tool.name(), "CronList");
         assert!(tool.is_read_only());
     }
 

@@ -14,6 +14,8 @@ use crab_plugin::hook::{HookAction, HookContext, HookExecutor, HookTrigger};
 use crab_session::{
     CompactionStrategy, ContextAction, ContextManager, Conversation, CostAccumulator,
 };
+use crab_tools::builtin::bash::BASH_TOOL_NAME;
+use crab_tools::builtin::plan_mode::{ENTER_PLAN_MODE_TOOL_NAME, EXIT_PLAN_MODE_TOOL_NAME};
 use crab_tools::executor::{StreamingOutput, ToolExecutor};
 use futures::StreamExt;
 use tokio::sync::mpsc;
@@ -168,8 +170,8 @@ pub async fn query_loop(
         for block in &assistant_msg.content {
             if let ContentBlock::ToolUse { name, .. } = block {
                 match name.as_str() {
-                    "enter_plan_mode" => plan_mode = true,
-                    "exit_plan_mode" => plan_mode = false,
+                    ENTER_PLAN_MODE_TOOL_NAME => plan_mode = true,
+                    EXIT_PLAN_MODE_TOOL_NAME => plan_mode = false,
                     _ => {}
                 }
             }
@@ -492,8 +494,8 @@ async fn execute_tool_calls(
         let mut input = call.input.clone();
 
         // ── Plan mode gate ─────────────────────────────────────────
-        // In plan mode, block write tools (except exit_plan_mode itself)
-        if plan_mode && name != "exit_plan_mode" {
+        // In plan mode, block write tools (except ExitPlanMode itself)
+        if plan_mode && name != EXIT_PLAN_MODE_TOOL_NAME {
             let _ = event_tx
                 .send(Event::ToolUseStart {
                     id: id.clone(),
@@ -502,7 +504,7 @@ async fn execute_tool_calls(
                 .await;
             let output = ToolOutput::error(
                 "Cannot execute write operations in plan mode. \
-                 Use exit_plan_mode to get approval before making changes.",
+                 Use ExitPlanMode to get approval before making changes.",
             );
             let _ = event_tx
                 .send(Event::ToolResult {
@@ -564,8 +566,8 @@ async fn execute_tool_calls(
             })
             .await;
 
-        // Use streaming execution for bash tool to get real-time output
-        let result = if name == "bash" {
+        // Use streaming execution for Bash to get real-time output
+        let result = if name == BASH_TOOL_NAME {
             let (streaming, mut delta_rx) = StreamingOutput::channel(64);
             let bash_tool = crab_tools::builtin::bash::BashTool;
             let ctx_clone = ctx.clone();

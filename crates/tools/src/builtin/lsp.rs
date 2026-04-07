@@ -10,11 +10,13 @@ use crab_core::tool::{Tool, ToolContext, ToolOutput};
 use serde_json::Value;
 
 /// LSP operations tool — stub for Phase 1.
+pub const LSP_TOOL_NAME: &str = "LSP";
+
 pub struct LspTool;
 
 impl Tool for LspTool {
     fn name(&self) -> &'static str {
-        "lsp"
+        LSP_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -138,7 +140,7 @@ mod tests {
     #[test]
     fn lsp_name_and_schema() {
         let tool = LspTool;
-        assert_eq!(tool.name(), "lsp");
+        assert_eq!(tool.name(), "LSP");
         let schema = tool.input_schema();
         let required = schema["required"].as_array().unwrap();
         assert!(required.iter().any(|v| v == "operation"));

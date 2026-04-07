@@ -23,11 +23,13 @@ const SENSITIVE_PATTERNS: &[&str] = &[
 ];
 
 /// File creation/overwrite tool.
+pub const WRITE_TOOL_NAME: &str = "Write";
+
 pub struct WriteTool;
 
 impl Tool for WriteTool {
     fn name(&self) -> &'static str {
-        "write"
+        WRITE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -155,7 +157,7 @@ mod tests {
     #[test]
     fn tool_metadata() {
         let tool = WriteTool;
-        assert_eq!(tool.name(), "write");
+        assert_eq!(tool.name(), "Write");
         assert!(!tool.is_read_only());
         assert!(tool.requires_confirmation());
     }

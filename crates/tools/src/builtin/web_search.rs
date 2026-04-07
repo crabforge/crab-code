@@ -257,11 +257,13 @@ impl SearchHistory {
 }
 
 /// Web search tool.
+pub const WEB_SEARCH_TOOL_NAME: &str = "WebSearch";
+
 pub struct WebSearchTool;
 
 impl Tool for WebSearchTool {
     fn name(&self) -> &'static str {
-        "web_search"
+        WEB_SEARCH_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -395,7 +397,7 @@ mod tests {
     #[test]
     fn tool_metadata() {
         let tool = WebSearchTool;
-        assert_eq!(tool.name(), "web_search");
+        assert_eq!(tool.name(), "WebSearch");
         assert!(tool.is_read_only());
         assert!(!tool.description().is_empty());
     }

@@ -10,11 +10,13 @@ use std::pin::Pin;
 /// which cannot depend on `crab-agent`). Instead, it validates the input
 /// and returns a structured JSON output with `"action": "spawn_agent"` that
 /// the agent layer's query loop intercepts to spawn an `AgentWorker`.
+pub const AGENT_TOOL_NAME: &str = "Agent";
+
 pub struct AgentTool;
 
 impl Tool for AgentTool {
     fn name(&self) -> &'static str {
-        "agent"
+        AGENT_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -136,7 +138,7 @@ mod tests {
     #[test]
     fn tool_metadata() {
         let tool = AgentTool;
-        assert_eq!(tool.name(), "agent");
+        assert_eq!(tool.name(), "Agent");
         assert!(tool.requires_confirmation());
         assert!(!tool.is_read_only());
         assert!(matches!(tool.source(), ToolSource::AgentSpawn));

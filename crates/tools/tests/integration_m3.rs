@@ -8,6 +8,12 @@ use std::sync::Arc;
 
 use crab_core::permission::{PermissionMode, PermissionPolicy};
 use crab_core::tool::ToolContext;
+use crab_tools::builtin::bash::BASH_TOOL_NAME;
+use crab_tools::builtin::edit::EDIT_TOOL_NAME;
+use crab_tools::builtin::glob::GLOB_TOOL_NAME;
+use crab_tools::builtin::grep::GREP_TOOL_NAME;
+use crab_tools::builtin::read::READ_TOOL_NAME;
+use crab_tools::builtin::write::WRITE_TOOL_NAME;
 use crab_tools::builtin::{create_default_registry, register_all_builtins};
 use crab_tools::executor::ToolExecutor;
 use crab_tools::registry::ToolRegistry;
@@ -45,7 +51,7 @@ async fn bash_echo_via_executor() {
     let ctx = make_ctx(tmp.path(), PermissionMode::Dangerously);
 
     let input = serde_json::json!({ "command": "echo integration-test" });
-    let output = executor.execute("bash", input, &ctx).await.unwrap();
+    let output = executor.execute(BASH_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error, "output: {}", output.text());
     assert!(
         output.text().contains("integration-test"),
@@ -64,7 +70,7 @@ async fn bash_ls_via_executor() {
 
     let cmd = if cfg!(windows) { "dir /b" } else { "ls" };
     let input = serde_json::json!({ "command": cmd });
-    let output = executor.execute("bash", input, &ctx).await.unwrap();
+    let output = executor.execute(BASH_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error, "output: {}", output.text());
     assert!(
         output.text().contains("visible.txt"),
@@ -85,7 +91,7 @@ async fn bash_nonzero_exit_is_error_via_executor() {
         "exit 42"
     };
     let input = serde_json::json!({ "command": cmd });
-    let output = executor.execute("bash", input, &ctx).await.unwrap();
+    let output = executor.execute(BASH_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(output.is_error);
 }
 
@@ -97,7 +103,7 @@ async fn bash_working_dir_is_respected() {
 
     let cmd = if cfg!(windows) { "cd" } else { "pwd" };
     let input = serde_json::json!({ "command": cmd });
-    let output = executor.execute("bash", input, &ctx).await.unwrap();
+    let output = executor.execute(BASH_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     // The output should contain the temp dir path
     let text = output.text();
@@ -122,7 +128,7 @@ async fn read_file_with_line_numbers() {
 
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
     let input = serde_json::json!({ "file_path": file.to_str().unwrap() });
-    let output = executor.execute("read", input, &ctx).await.unwrap();
+    let output = executor.execute(READ_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     let text = output.text();
     // cat -n format: "     1\talpha"
@@ -145,7 +151,7 @@ async fn read_file_with_offset_and_limit() {
         "offset": 2,
         "limit": 2
     });
-    let output = executor.execute("read", input, &ctx).await.unwrap();
+    let output = executor.execute(READ_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     let text = output.text();
     // Should show lines 2-3 only
@@ -168,7 +174,7 @@ async fn read_nonexistent_file_is_error() {
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
 
     let input = serde_json::json!({ "file_path": "/nonexistent/path/file.txt" });
-    let output = executor.execute("read", input, &ctx).await.unwrap();
+    let output = executor.execute(READ_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(output.is_error);
     assert!(output.text().contains("Failed to read"));
 }
@@ -180,7 +186,7 @@ async fn read_binary_extension_returns_info() {
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
 
     let input = serde_json::json!({ "file_path": "/some/image.png" });
-    let output = executor.execute("read", input, &ctx).await.unwrap();
+    let output = executor.execute(READ_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     assert!(output.text().contains("Binary file"));
 }
@@ -200,7 +206,10 @@ async fn write_tool_creates_file() {
         "file_path": file.to_str().unwrap(),
         "content": "hello world"
     });
-    let output = executor.execute("write", input, &ctx).await.unwrap();
+    let output = executor
+        .execute(WRITE_TOOL_NAME, input, &ctx)
+        .await
+        .unwrap();
     assert!(!output.is_error, "write should succeed: {}", output.text());
     assert!(file.exists());
 }
@@ -220,7 +229,7 @@ async fn edit_tool_returns_error_for_nonexistent_file() {
         "old_string": "foo",
         "new_string": "bar"
     });
-    let output = executor.execute("edit", input, &ctx).await.unwrap();
+    let output = executor.execute(EDIT_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(output.is_error);
 }
 
@@ -238,7 +247,7 @@ async fn glob_finds_files_in_temp_tree() {
 
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
     let input = serde_json::json!({ "pattern": "*.rs" });
-    let output = executor.execute("glob", input, &ctx).await.unwrap();
+    let output = executor.execute(GLOB_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error, "output: {}", output.text());
     let text = output.text();
     assert!(text.contains("main.rs"), "expected main.rs: {text}");
@@ -257,7 +266,7 @@ async fn glob_recursive_pattern() {
 
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
     let input = serde_json::json!({ "pattern": "**/*.rs" });
-    let output = executor.execute("glob", input, &ctx).await.unwrap();
+    let output = executor.execute(GLOB_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     let text = output.text();
     assert!(text.contains("top.rs"), "expected top.rs: {text}");
@@ -272,7 +281,7 @@ async fn glob_no_matches_returns_message() {
 
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
     let input = serde_json::json!({ "pattern": "*.xyz" });
-    let output = executor.execute("glob", input, &ctx).await.unwrap();
+    let output = executor.execute(GLOB_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     assert!(output.text().contains("No files matched"));
 }
@@ -288,7 +297,7 @@ async fn glob_with_explicit_path() {
 
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
     let input = serde_json::json!({ "pattern": "*.rs", "path": "subdir" });
-    let output = executor.execute("glob", input, &ctx).await.unwrap();
+    let output = executor.execute(GLOB_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     let text = output.text();
     assert!(text.contains("inner.rs"), "expected inner.rs: {text}");
@@ -317,7 +326,7 @@ async fn grep_finds_content_in_files() {
         "pattern": "fn\\s+\\w+",
         "output_mode": "content"
     });
-    let output = executor.execute("grep", input, &ctx).await.unwrap();
+    let output = executor.execute(GREP_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     let text = output.text();
     assert!(text.contains("fn main()"), "expected fn main(): {text}");
@@ -335,7 +344,7 @@ async fn grep_files_with_matches_mode() {
 
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
     let input = serde_json::json!({ "pattern": "world" });
-    let output = executor.execute("grep", input, &ctx).await.unwrap();
+    let output = executor.execute(GREP_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     let text = output.text();
     assert!(text.contains("a.rs"), "expected a.rs: {text}");
@@ -354,7 +363,7 @@ async fn grep_count_mode() {
         "pattern": "match",
         "output_mode": "count"
     });
-    let output = executor.execute("grep", input, &ctx).await.unwrap();
+    let output = executor.execute(GREP_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     assert!(
         output.text().contains(":3"),
@@ -371,7 +380,7 @@ async fn grep_no_matches_returns_message() {
 
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
     let input = serde_json::json!({ "pattern": "zzz_nonexistent" });
-    let output = executor.execute("grep", input, &ctx).await.unwrap();
+    let output = executor.execute(GREP_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     assert!(output.text().contains("No matches found"));
 }
@@ -388,7 +397,7 @@ async fn grep_with_glob_filter() {
         "pattern": "hello",
         "glob": "*.rs"
     });
-    let output = executor.execute("grep", input, &ctx).await.unwrap();
+    let output = executor.execute(GREP_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     let text = output.text();
     assert!(text.contains("code.rs"), "expected code.rs: {text}");
@@ -414,7 +423,7 @@ async fn grep_with_context_lines() {
         "output_mode": "content",
         "context": 1
     });
-    let output = executor.execute("grep", input, &ctx).await.unwrap();
+    let output = executor.execute(GREP_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(!output.is_error);
     let text = output.text();
     assert!(text.contains("TARGET"), "expected TARGET: {text}");
@@ -431,10 +440,10 @@ async fn permission_denied_tool_blocked() {
     let executor = make_executor();
     let tmp = tempfile::tempdir().unwrap();
     let mut ctx = make_ctx(tmp.path(), PermissionMode::Dangerously);
-    ctx.permission_policy.denied_tools = vec!["bash".into()];
+    ctx.permission_policy.denied_tools = vec![BASH_TOOL_NAME.into()];
 
     let input = serde_json::json!({ "command": "echo hello" });
-    let output = executor.execute("bash", input, &ctx).await.unwrap();
+    let output = executor.execute(BASH_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(output.is_error);
     assert!(
         output.text().contains("denied"),
@@ -448,15 +457,21 @@ async fn permission_denied_glob_pattern() {
     let executor = make_executor();
     let tmp = tempfile::tempdir().unwrap();
     let mut ctx = make_ctx(tmp.path(), PermissionMode::Dangerously);
-    ctx.permission_policy.denied_tools = vec!["g*".into()];
+    ctx.permission_policy.denied_tools = vec!["G*".into()];
 
     // Both glob and grep should be denied
     let glob_input = serde_json::json!({ "pattern": "*.rs" });
-    let glob_output = executor.execute("glob", glob_input, &ctx).await.unwrap();
+    let glob_output = executor
+        .execute(GLOB_TOOL_NAME, glob_input, &ctx)
+        .await
+        .unwrap();
     assert!(glob_output.is_error, "glob should be denied");
 
     let grep_input = serde_json::json!({ "pattern": "hello" });
-    let grep_output = executor.execute("grep", grep_input, &ctx).await.unwrap();
+    let grep_output = executor
+        .execute(GREP_TOOL_NAME, grep_input, &ctx)
+        .await
+        .unwrap();
     assert!(grep_output.is_error, "grep should be denied");
 }
 
@@ -470,7 +485,7 @@ async fn permission_read_only_always_allowed() {
     // Default mode — read-only tools should be auto-allowed
     let ctx = make_ctx(tmp.path(), PermissionMode::Default);
     let input = serde_json::json!({ "file_path": file.to_str().unwrap() });
-    let output = executor.execute("read", input, &ctx).await.unwrap();
+    let output = executor.execute(READ_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(
         !output.is_error,
         "read should be allowed: {}",
@@ -485,7 +500,7 @@ async fn permission_dangerously_allows_all() {
     let ctx = make_ctx(tmp.path(), PermissionMode::Dangerously);
 
     let input = serde_json::json!({ "command": "echo permitted" });
-    let output = executor.execute("bash", input, &ctx).await.unwrap();
+    let output = executor.execute(BASH_TOOL_NAME, input, &ctx).await.unwrap();
     assert!(
         !output.is_error,
         "Dangerously should auto-allow: {}",
@@ -515,11 +530,11 @@ async fn execute_unchecked_skips_permission() {
 
     // Even with denied list, execute_unchecked should work
     let mut ctx = make_ctx(tmp.path(), PermissionMode::Default);
-    ctx.permission_policy.denied_tools = vec!["read".into()];
+    ctx.permission_policy.denied_tools = vec![READ_TOOL_NAME.into()];
 
     let input = serde_json::json!({ "file_path": file.to_str().unwrap() });
     let output = executor
-        .execute_unchecked("read", input, &ctx)
+        .execute_unchecked(READ_TOOL_NAME, input, &ctx)
         .await
         .unwrap();
     assert!(
@@ -545,36 +560,36 @@ fn register_all_builtins_produces_expected_tools() {
 fn all_expected_tools_registered() {
     let registry = create_default_registry();
     let expected = [
-        "bash",
-        "read",
-        "write",
-        "edit",
-        "glob",
-        "grep",
-        "notebook_edit",
-        "notebook_read",
-        "lsp",
-        "agent",
-        "web_search",
-        "web_fetch",
-        "ask_user",
-        "enter_plan_mode",
-        "image_read",
-        "task_create",
-        "task_list",
-        "task_update",
-        "task_get",
-        "enter_worktree",
-        "exit_worktree",
-        "team_create",
-        "team_delete",
-        "send_message",
-        "task_stop",
-        "task_output",
-        "cron_create",
-        "cron_delete",
-        "cron_list",
-        "remote_trigger",
+        "Bash",
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep",
+        "NotebookEdit",
+        "NotebookRead",
+        "LSP",
+        "Agent",
+        "WebSearch",
+        "WebFetch",
+        "AskUserQuestion",
+        "EnterPlanMode",
+        "ImageRead",
+        "TaskCreate",
+        "TaskList",
+        "TaskUpdate",
+        "TaskGet",
+        "EnterWorktree",
+        "ExitWorktree",
+        "TeamCreate",
+        "TeamDelete",
+        "SendMessage",
+        "TaskStop",
+        "TaskOutput",
+        "CronCreate",
+        "CronDelete",
+        "CronList",
+        "RemoteTrigger",
     ];
     for name in &expected {
         assert!(
@@ -639,12 +654,12 @@ fn register_same_tool_twice_overwrites() {
 #[test]
 fn filtered_schemas_works() {
     let registry = create_default_registry();
-    let filtered = registry.tool_schemas_filtered(&["bash", "read", "missing_tool"]);
+    let filtered = registry.tool_schemas_filtered(&["Bash", "Read", "missing_tool"]);
     assert_eq!(filtered.len(), 2);
     let names: Vec<&str> = filtered
         .iter()
         .map(|s| s["name"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"bash"));
-    assert!(names.contains(&"read"));
+    assert!(names.contains(&"Bash"));
+    assert!(names.contains(&"Read"));
 }

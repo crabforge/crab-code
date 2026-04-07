@@ -11,11 +11,13 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::executor::StreamingOutput;
 
 /// Shell command execution tool.
+pub const BASH_TOOL_NAME: &str = "Bash";
+
 pub struct BashTool;
 
 impl Tool for BashTool {
     fn name(&self) -> &'static str {
-        "bash"
+        BASH_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {

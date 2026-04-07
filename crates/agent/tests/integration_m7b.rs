@@ -15,7 +15,28 @@ use crab_core::model::{ModelId, TokenUsage};
 use crab_core::permission::{PermissionMode, PermissionPolicy};
 use crab_core::tool::{ToolContext, ToolOutput, ToolOutputContent};
 use crab_session::{Conversation, MemoryStore, SessionHistory};
+use crab_tools::builtin::agent::AGENT_TOOL_NAME;
+use crab_tools::builtin::bash::BASH_TOOL_NAME;
 use crab_tools::builtin::create_default_registry;
+use crab_tools::builtin::cron::{
+    CRON_CREATE_TOOL_NAME, CRON_DELETE_TOOL_NAME, CRON_LIST_TOOL_NAME,
+};
+use crab_tools::builtin::edit::EDIT_TOOL_NAME;
+use crab_tools::builtin::glob::GLOB_TOOL_NAME;
+use crab_tools::builtin::grep::GREP_TOOL_NAME;
+use crab_tools::builtin::notebook::NOTEBOOK_EDIT_TOOL_NAME;
+use crab_tools::builtin::read::READ_TOOL_NAME;
+use crab_tools::builtin::remote_trigger::REMOTE_TRIGGER_TOOL_NAME;
+use crab_tools::builtin::task::{
+    TASK_CREATE_TOOL_NAME, TASK_GET_TOOL_NAME, TASK_LIST_TOOL_NAME, TASK_OUTPUT_TOOL_NAME,
+    TASK_STOP_TOOL_NAME, TASK_UPDATE_TOOL_NAME,
+};
+use crab_tools::builtin::team::{
+    SEND_MESSAGE_TOOL_NAME, TEAM_CREATE_TOOL_NAME, TEAM_DELETE_TOOL_NAME,
+};
+use crab_tools::builtin::web_fetch::WEB_FETCH_TOOL_NAME;
+use crab_tools::builtin::web_search::WEB_SEARCH_TOOL_NAME;
+use crab_tools::builtin::write::WRITE_TOOL_NAME;
 
 fn test_backend() -> Arc<LlmBackend> {
     Arc::new(LlmBackend::OpenAi(crab_api::openai::OpenAiClient::new(
@@ -143,7 +164,7 @@ fn session_with_memory_and_history() {
 #[tokio::test]
 async fn agent_tool_produces_spawn_request() {
     let registry = create_default_registry();
-    let tool = registry.get("agent").unwrap();
+    let tool = registry.get(AGENT_TOOL_NAME).unwrap();
 
     let ctx = ToolContext {
         working_dir: std::env::temp_dir(),
@@ -273,7 +294,7 @@ async fn tool_chain_write_then_edit() {
     };
 
     // Step 1: Write a file
-    let write_tool = registry.get("write").unwrap();
+    let write_tool = registry.get(WRITE_TOOL_NAME).unwrap();
     let write_input = serde_json::json!({
         "file_path": file_path.to_str().unwrap(),
         "content": "fn hello() {\n    println!(\"hello\");\n}\n"
@@ -282,7 +303,7 @@ async fn tool_chain_write_then_edit() {
     assert!(!output.is_error, "write failed: {}", output.text());
 
     // Step 2: Edit the file
-    let edit_tool = registry.get("edit").unwrap();
+    let edit_tool = registry.get(EDIT_TOOL_NAME).unwrap();
     let edit_input = serde_json::json!({
         "file_path": file_path.to_str().unwrap(),
         "old_string": "fn hello()",
@@ -319,7 +340,7 @@ async fn tool_chain_glob_then_read() {
     };
 
     // Step 1: Glob for .rs files
-    let glob_tool = registry.get("glob").unwrap();
+    let glob_tool = registry.get(GLOB_TOOL_NAME).unwrap();
     let glob_input = serde_json::json!({
         "pattern": "*.rs",
         "path": dir.path().to_str().unwrap()
@@ -332,7 +353,7 @@ async fn tool_chain_glob_then_read() {
     assert!(!text.contains("README.md"));
 
     // Step 2: Read one of the found files
-    let read_tool = registry.get("read").unwrap();
+    let read_tool = registry.get(READ_TOOL_NAME).unwrap();
     let read_input = serde_json::json!({
         "file_path": dir.path().join("main.rs").to_str().unwrap()
     });
@@ -356,12 +377,16 @@ async fn permission_denied_tool_blocked() {
         permission_policy: PermissionPolicy {
             mode: PermissionMode::Dangerously,
             allowed_tools: Vec::new(),
-            denied_tools: vec!["bash".into()],
+            denied_tools: vec![BASH_TOOL_NAME.into()],
         },
     };
 
     let output = executor
-        .execute("bash", serde_json::json!({"command": "echo hi"}), &ctx)
+        .execute(
+            BASH_TOOL_NAME,
+            serde_json::json!({"command": "echo hi"}),
+            &ctx,
+        )
         .await
         .unwrap();
     assert!(output.is_error);
@@ -423,29 +448,29 @@ fn default_registry_includes_all_builtin_tools() {
     let registry = create_default_registry();
 
     let expected = [
-        "bash",
-        "read",
-        "write",
-        "edit",
-        "glob",
-        "grep",
-        "agent",
-        "notebook_edit",
-        "web_search",
-        "web_fetch",
-        "task_create",
-        "task_list",
-        "task_update",
-        "task_get",
-        "team_create",
-        "team_delete",
-        "send_message",
-        "task_stop",
-        "task_output",
-        "cron_create",
-        "cron_delete",
-        "cron_list",
-        "remote_trigger",
+        BASH_TOOL_NAME,
+        READ_TOOL_NAME,
+        WRITE_TOOL_NAME,
+        EDIT_TOOL_NAME,
+        GLOB_TOOL_NAME,
+        GREP_TOOL_NAME,
+        AGENT_TOOL_NAME,
+        NOTEBOOK_EDIT_TOOL_NAME,
+        WEB_SEARCH_TOOL_NAME,
+        WEB_FETCH_TOOL_NAME,
+        TASK_CREATE_TOOL_NAME,
+        TASK_LIST_TOOL_NAME,
+        TASK_UPDATE_TOOL_NAME,
+        TASK_GET_TOOL_NAME,
+        TEAM_CREATE_TOOL_NAME,
+        TEAM_DELETE_TOOL_NAME,
+        SEND_MESSAGE_TOOL_NAME,
+        TASK_STOP_TOOL_NAME,
+        TASK_OUTPUT_TOOL_NAME,
+        CRON_CREATE_TOOL_NAME,
+        CRON_DELETE_TOOL_NAME,
+        CRON_LIST_TOOL_NAME,
+        REMOTE_TRIGGER_TOOL_NAME,
     ];
 
     for name in &expected {

@@ -99,42 +99,42 @@ mod tests {
     fn register_all_builtins_populates_registry() {
         let registry = create_default_registry();
         assert!(!registry.is_empty());
-        // Verify key tools are present
-        assert!(registry.get("bash").is_some());
-        assert!(registry.get("read").is_some());
-        assert!(registry.get("write").is_some());
-        assert!(registry.get("edit").is_some());
-        assert!(registry.get("glob").is_some());
-        assert!(registry.get("grep").is_some());
-        assert!(registry.get("agent").is_some());
-        assert!(registry.get("notebook_edit").is_some());
-        assert!(registry.get("notebook_read").is_some());
-        assert!(registry.get("lsp").is_some());
-        assert!(registry.get("web_search").is_some());
-        assert!(registry.get("web_fetch").is_some());
-        assert!(registry.get("ask_user").is_some());
-        assert!(registry.get("enter_plan_mode").is_some());
-        assert!(registry.get("exit_plan_mode").is_some());
-        assert!(registry.get("image_read").is_some());
-        assert!(registry.get("task_create").is_some());
-        assert!(registry.get("task_list").is_some());
-        assert!(registry.get("task_update").is_some());
-        assert!(registry.get("task_get").is_some());
-        assert!(registry.get("enter_worktree").is_some());
-        assert!(registry.get("exit_worktree").is_some());
-        assert!(registry.get("team_create").is_some());
-        assert!(registry.get("team_delete").is_some());
-        assert!(registry.get("send_message").is_some());
-        assert!(registry.get("task_stop").is_some());
-        assert!(registry.get("task_output").is_some());
-        assert!(registry.get("cron_create").is_some());
-        assert!(registry.get("cron_delete").is_some());
-        assert!(registry.get("cron_list").is_some());
-        assert!(registry.get("remote_trigger").is_some());
+        // Verify key tools are present by canonical name.
+        assert!(registry.get("Bash").is_some());
+        assert!(registry.get("Read").is_some());
+        assert!(registry.get("Write").is_some());
+        assert!(registry.get("Edit").is_some());
+        assert!(registry.get("Glob").is_some());
+        assert!(registry.get("Grep").is_some());
+        assert!(registry.get("Agent").is_some());
+        assert!(registry.get("NotebookEdit").is_some());
+        assert!(registry.get("NotebookRead").is_some());
+        assert!(registry.get("LSP").is_some());
+        assert!(registry.get("WebSearch").is_some());
+        assert!(registry.get("WebFetch").is_some());
+        assert!(registry.get("AskUserQuestion").is_some());
+        assert!(registry.get("EnterPlanMode").is_some());
+        assert!(registry.get("ExitPlanMode").is_some());
+        assert!(registry.get("ImageRead").is_some());
+        assert!(registry.get("TaskCreate").is_some());
+        assert!(registry.get("TaskList").is_some());
+        assert!(registry.get("TaskUpdate").is_some());
+        assert!(registry.get("TaskGet").is_some());
+        assert!(registry.get("EnterWorktree").is_some());
+        assert!(registry.get("ExitWorktree").is_some());
+        assert!(registry.get("TeamCreate").is_some());
+        assert!(registry.get("TeamDelete").is_some());
+        assert!(registry.get("SendMessage").is_some());
+        assert!(registry.get("TaskStop").is_some());
+        assert!(registry.get("TaskOutput").is_some());
+        assert!(registry.get("CronCreate").is_some());
+        assert!(registry.get("CronDelete").is_some());
+        assert!(registry.get("CronList").is_some());
+        assert!(registry.get("RemoteTrigger").is_some());
 
         // PowerShell tool — only on Windows
         if cfg!(windows) {
-            assert!(registry.get("powershell").is_some());
+            assert!(registry.get("PowerShell").is_some());
         }
     }
 

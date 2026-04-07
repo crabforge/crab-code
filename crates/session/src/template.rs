@@ -7,6 +7,13 @@
 
 use serde::{Deserialize, Serialize};
 
+use crab_tools::builtin::bash::BASH_TOOL_NAME;
+use crab_tools::builtin::edit::EDIT_TOOL_NAME;
+use crab_tools::builtin::glob::GLOB_TOOL_NAME;
+use crab_tools::builtin::grep::GREP_TOOL_NAME;
+use crab_tools::builtin::read::READ_TOOL_NAME;
+use crab_tools::builtin::write::WRITE_TOOL_NAME;
+
 use crate::history::SessionHistory;
 
 // ── Session template ─────────────────────────────────────────────────
@@ -94,10 +101,10 @@ pub fn builtin_templates() -> Vec<SessionTemplate> {
              Be constructive and specific.",
         )
         .with_tools(vec![
-            "read_file".into(),
-            "grep".into(),
-            "glob".into(),
-            "bash".into(),
+            READ_TOOL_NAME.into(),
+            GREP_TOOL_NAME.into(),
+            GLOB_TOOL_NAME.into(),
+            BASH_TOOL_NAME.into(),
         ]),
         SessionTemplate::new(
             SessionKind::BugFix,
@@ -108,11 +115,11 @@ pub fn builtin_templates() -> Vec<SessionTemplate> {
              and verify with tests.",
         )
         .with_tools(vec![
-            "read_file".into(),
-            "grep".into(),
-            "bash".into(),
-            "edit_file".into(),
-            "write_file".into(),
+            READ_TOOL_NAME.into(),
+            GREP_TOOL_NAME.into(),
+            BASH_TOOL_NAME.into(),
+            EDIT_TOOL_NAME.into(),
+            WRITE_TOOL_NAME.into(),
         ]),
         SessionTemplate::new(
             SessionKind::Feature,
@@ -123,12 +130,12 @@ pub fn builtin_templates() -> Vec<SessionTemplate> {
              compiles and passes linting.",
         )
         .with_tools(vec![
-            "read_file".into(),
-            "write_file".into(),
-            "edit_file".into(),
-            "bash".into(),
-            "glob".into(),
-            "grep".into(),
+            READ_TOOL_NAME.into(),
+            WRITE_TOOL_NAME.into(),
+            EDIT_TOOL_NAME.into(),
+            BASH_TOOL_NAME.into(),
+            GLOB_TOOL_NAME.into(),
+            GREP_TOOL_NAME.into(),
         ]),
         SessionTemplate::new(
             SessionKind::Research,
@@ -139,10 +146,10 @@ pub fn builtin_templates() -> Vec<SessionTemplate> {
              Avoid making changes unless explicitly asked.",
         )
         .with_tools(vec![
-            "read_file".into(),
-            "grep".into(),
-            "glob".into(),
-            "bash".into(),
+            READ_TOOL_NAME.into(),
+            GREP_TOOL_NAME.into(),
+            GLOB_TOOL_NAME.into(),
+            BASH_TOOL_NAME.into(),
         ]),
     ]
 }

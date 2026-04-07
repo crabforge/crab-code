@@ -31,10 +31,11 @@ pub fn to_openai_tools(tool_schemas: &[serde_json::Value]) -> Vec<serde_json::Va
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::builtin::read::READ_TOOL_NAME;
 
     fn sample_schemas() -> Vec<serde_json::Value> {
         vec![serde_json::json!({
-            "name": "read",
+            "name": READ_TOOL_NAME,
             "description": "read a file",
             "input_schema": {
                 "type": "object",
@@ -51,7 +52,7 @@ mod tests {
         let schemas = sample_schemas();
         let result = to_anthropic_tools(&schemas);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0]["name"], "read");
+        assert_eq!(result[0]["name"], READ_TOOL_NAME);
         assert!(result[0].get("input_schema").is_some());
     }
 
@@ -61,7 +62,7 @@ mod tests {
         let result = to_openai_tools(&schemas);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["type"], "function");
-        assert_eq!(result[0]["function"]["name"], "read");
+        assert_eq!(result[0]["function"]["name"], READ_TOOL_NAME);
         assert_eq!(result[0]["function"]["parameters"]["type"], "object");
     }
 }

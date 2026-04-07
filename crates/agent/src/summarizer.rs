@@ -6,6 +6,12 @@
 use std::fmt::Write;
 
 use crab_core::message::{ContentBlock, Message, Role};
+use crab_tools::builtin::bash::BASH_TOOL_NAME;
+use crab_tools::builtin::edit::EDIT_TOOL_NAME;
+use crab_tools::builtin::glob::GLOB_TOOL_NAME;
+use crab_tools::builtin::grep::GREP_TOOL_NAME;
+use crab_tools::builtin::read::READ_TOOL_NAME;
+use crab_tools::builtin::write::WRITE_TOOL_NAME;
 
 // ── Summary types ─────────────────────────────────────────────────────
 
@@ -327,7 +333,7 @@ fn extract_code_changes(msg: &Message) -> Vec<String> {
     for block in &msg.content {
         if let ContentBlock::ToolUse { name, input, .. } = block {
             match name.as_str() {
-                "write" | "write_file" => {
+                WRITE_TOOL_NAME => {
                     if let Some(path) = input
                         .get("file_path")
                         .or_else(|| input.get("path"))
@@ -336,7 +342,7 @@ fn extract_code_changes(msg: &Message) -> Vec<String> {
                         changes.push(format!("Wrote file: {path}"));
                     }
                 }
-                "edit" | "edit_file" => {
+                EDIT_TOOL_NAME => {
                     if let Some(path) = input
                         .get("file_path")
                         .or_else(|| input.get("path"))
@@ -345,7 +351,7 @@ fn extract_code_changes(msg: &Message) -> Vec<String> {
                         changes.push(format!("Edited file: {path}"));
                     }
                 }
-                "bash" => {
+                BASH_TOOL_NAME => {
                     if let Some(cmd) = input.get("command").and_then(|v| v.as_str())
                         && (cmd.starts_with("git commit") || cmd.starts_with("git add"))
                     {
@@ -365,20 +371,20 @@ fn extract_tool_actions(msg: &Message) -> Vec<String> {
     for block in &msg.content {
         if let ContentBlock::ToolUse { name, input, .. } = block {
             let detail = match name.as_str() {
-                "read" | "read_file" => input
+                READ_TOOL_NAME => input
                     .get("file_path")
                     .or_else(|| input.get("path"))
                     .and_then(|v| v.as_str())
                     .map(|p| format!("Read: {p}")),
-                "glob" => input
+                GLOB_TOOL_NAME => input
                     .get("pattern")
                     .and_then(|v| v.as_str())
                     .map(|p| format!("Glob: {p}")),
-                "grep" => input
+                GREP_TOOL_NAME => input
                     .get("pattern")
                     .and_then(|v| v.as_str())
                     .map(|p| format!("Grep: {}", truncate_line(p, 60))),
-                "bash" => input
+                BASH_TOOL_NAME => input
                     .get("command")
                     .and_then(|v| v.as_str())
                     .map(|c| format!("Bash: {}", truncate_line(c, 60))),
@@ -530,7 +536,7 @@ mod tests {
     #[test]
     fn extract_write_change() {
         let msg = assistant_with_tool(
-            "write",
+            WRITE_TOOL_NAME,
             serde_json::json!({"file_path": "src/main.rs", "content": "fn main() {}"}),
         );
         let changes = extract_code_changes(&msg);
@@ -541,7 +547,7 @@ mod tests {
     #[test]
     fn extract_edit_change() {
         let msg = assistant_with_tool(
-            "edit",
+            EDIT_TOOL_NAME,
             serde_json::json!({"file_path": "src/lib.rs", "old_string": "a", "new_string": "b"}),
         );
         let changes = extract_code_changes(&msg);
@@ -552,7 +558,7 @@ mod tests {
     #[test]
     fn extract_git_commit_change() {
         let msg = assistant_with_tool(
-            "bash",
+            BASH_TOOL_NAME,
             serde_json::json!({"command": "git commit -m 'fix bug'"}),
         );
         let changes = extract_code_changes(&msg);
@@ -562,7 +568,10 @@ mod tests {
 
     #[test]
     fn extract_no_change_for_read() {
-        let msg = assistant_with_tool("read", serde_json::json!({"file_path": "src/main.rs"}));
+        let msg = assistant_with_tool(
+            READ_TOOL_NAME,
+            serde_json::json!({"file_path": "src/main.rs"}),
+        );
         let changes = extract_code_changes(&msg);
         assert!(changes.is_empty());
     }
@@ -571,7 +580,10 @@ mod tests {
 
     #[test]
     fn extract_read_action() {
-        let msg = assistant_with_tool("read", serde_json::json!({"file_path": "src/lib.rs"}));
+        let msg = assistant_with_tool(
+            READ_TOOL_NAME,
+            serde_json::json!({"file_path": "src/lib.rs"}),
+        );
         let actions = extract_tool_actions(&msg);
         assert_eq!(actions.len(), 1);
         assert!(actions[0].contains("Read: src/lib.rs"));
@@ -579,7 +591,7 @@ mod tests {
 
     #[test]
     fn extract_grep_action() {
-        let msg = assistant_with_tool("grep", serde_json::json!({"pattern": "fn main"}));
+        let msg = assistant_with_tool(GREP_TOOL_NAME, serde_json::json!({"pattern": "fn main"}));
         let actions = extract_tool_actions(&msg);
         assert_eq!(actions.len(), 1);
         assert!(actions[0].contains("Grep: fn main"));
@@ -587,7 +599,7 @@ mod tests {
 
     #[test]
     fn extract_glob_action() {
-        let msg = assistant_with_tool("glob", serde_json::json!({"pattern": "**/*.rs"}));
+        let msg = assistant_with_tool(GLOB_TOOL_NAME, serde_json::json!({"pattern": "**/*.rs"}));
         let actions = extract_tool_actions(&msg);
         assert_eq!(actions.len(), 1);
         assert!(actions[0].contains("Glob: **/*.rs"));
@@ -700,7 +712,7 @@ mod tests {
             user_msg("Read the main.rs file"),
             assistant_text_and_tool(
                 "I'll read the file for you.",
-                "read",
+                READ_TOOL_NAME,
                 serde_json::json!({"file_path": "src/main.rs"}),
             ),
         ];
@@ -717,7 +729,7 @@ mod tests {
         let messages = vec![
             user_msg("Create a new config module"),
             assistant_with_tool(
-                "write",
+                WRITE_TOOL_NAME,
                 serde_json::json!({"file_path": "src/config.rs", "content": "pub struct Config {}"}),
             ),
         ];
@@ -755,7 +767,7 @@ mod tests {
     fn summarize_no_tool_actions_when_disabled() {
         let messages = vec![
             user_msg("Read main.rs"),
-            assistant_with_tool("read", serde_json::json!({"file_path": "main.rs"})),
+            assistant_with_tool(READ_TOOL_NAME, serde_json::json!({"file_path": "main.rs"})),
         ];
         let config = SummarizerConfig {
             include_tool_actions: false,
@@ -896,12 +908,12 @@ mod tests {
             user_msg("The JWT validation doesn't work for expired tokens"),
             assistant_text_and_tool(
                 "I'll fix the expiry check.",
-                "edit",
+                EDIT_TOOL_NAME,
                 serde_json::json!({"file_path": "src/auth.rs", "old_string": "a", "new_string": "b"}),
             ),
             user_msg("Now add rate limiting"),
             assistant_with_tool(
-                "write",
+                WRITE_TOOL_NAME,
                 serde_json::json!({"file_path": "src/rate_limit.rs", "content": "pub fn limit() {}"}),
             ),
         ];

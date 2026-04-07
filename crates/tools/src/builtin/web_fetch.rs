@@ -16,11 +16,13 @@ const DEFAULT_TIMEOUT_SECS: u64 = 30;
 const MAX_BODY_SIZE: u64 = 5 * 1024 * 1024;
 
 /// Web page fetching tool.
+pub const WEB_FETCH_TOOL_NAME: &str = "WebFetch";
+
 pub struct WebFetchTool;
 
 impl Tool for WebFetchTool {
     fn name(&self) -> &'static str {
-        "web_fetch"
+        WEB_FETCH_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -163,7 +165,7 @@ mod tests {
     #[test]
     fn tool_metadata() {
         let tool = WebFetchTool;
-        assert_eq!(tool.name(), "web_fetch");
+        assert_eq!(tool.name(), "WebFetch");
         assert!(tool.is_read_only());
         assert!(!tool.description().is_empty());
     }

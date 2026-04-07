@@ -8,6 +8,8 @@ use crab_core::tool::{Tool, ToolContext, ToolOutput};
 use serde_json::Value;
 
 /// File reading tool.
+pub const READ_TOOL_NAME: &str = "Read";
+
 pub struct ReadTool;
 
 /// Extensions treated as binary/non-text — return type info instead of content.
@@ -25,7 +27,7 @@ fn extension_of(path: &Path) -> &str {
 
 impl Tool for ReadTool {
     fn name(&self) -> &'static str {
-        "read"
+        READ_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {

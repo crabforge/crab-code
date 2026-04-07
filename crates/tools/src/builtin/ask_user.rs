@@ -13,11 +13,13 @@ use std::pin::Pin;
 /// In the current stub implementation, the tool formats the question and
 /// options for display but returns a placeholder response. A real
 /// implementation would hook into the TUI/CLI input system.
+pub const ASK_USER_QUESTION_TOOL_NAME: &str = "AskUserQuestion";
+
 pub struct AskUserQuestionTool;
 
 impl Tool for AskUserQuestionTool {
     fn name(&self) -> &'static str {
-        "ask_user"
+        ASK_USER_QUESTION_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -224,7 +226,7 @@ mod tests {
     #[test]
     fn tool_metadata() {
         let tool = AskUserQuestionTool;
-        assert_eq!(tool.name(), "ask_user");
+        assert_eq!(tool.name(), "AskUserQuestion");
         assert!(tool.is_read_only());
         assert!(!tool.description().is_empty());
     }

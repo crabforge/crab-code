@@ -7,11 +7,13 @@ use std::path::Path;
 use std::pin::Pin;
 
 /// Diff-based file editing tool.
+pub const EDIT_TOOL_NAME: &str = "Edit";
+
 pub struct EditTool;
 
 impl Tool for EditTool {
     fn name(&self) -> &'static str {
-        "edit"
+        EDIT_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -308,7 +310,7 @@ mod tests {
     #[test]
     fn tool_metadata() {
         let tool = EditTool;
-        assert_eq!(tool.name(), "edit");
+        assert_eq!(tool.name(), "Edit");
         assert!(!tool.is_read_only());
         assert!(tool.requires_confirmation());
     }

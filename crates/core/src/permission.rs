@@ -53,7 +53,7 @@ impl FromStr for PermissionMode {
 pub struct PermissionPolicy {
     pub mode: PermissionMode,
     pub allowed_tools: Vec<String>,
-    /// Supports glob pattern matching (e.g. "mcp__*", "bash").
+    /// Supports glob pattern matching (e.g. "mcp__*", "Bash").
     pub denied_tools: Vec<String>,
 }
 
@@ -81,7 +81,9 @@ impl PermissionPolicy {
     /// matching at least one pattern are permitted. Supports glob patterns
     /// and parameter-level matching via `matches_tool_filter`.
     pub fn is_explicitly_allowed(&self, tool_name: &str) -> bool {
-        self.allowed_tools.iter().any(|a| a == tool_name)
+        self.allowed_tools
+            .iter()
+            .any(|pattern| tool_name_matches_pattern(pattern, tool_name))
     }
 
     /// Check whether a tool invocation is allowed by the `allowed_tools`
@@ -170,6 +172,10 @@ pub fn matches_tool_filter(filter: &str, tool_name: &str, tool_input: &serde_jso
 
     // Plain name match (may contain globs)
     glob_match(filter, tool_name)
+}
+
+fn tool_name_matches_pattern(pattern: &str, tool_name: &str) -> bool {
+    glob_match(pattern, tool_name)
 }
 
 /// Simple glob matching supporting `*` (any chars), `?` (single char),
@@ -273,19 +279,6 @@ pub enum RiskLevel {
 /// is unavailable.
 pub struct AutoModeClassifier;
 
-/// Read-only tools that are always safe.
-const SAFE_TOOLS: &[&str] = &[
-    "read",
-    "glob",
-    "grep",
-    "notebook_read",
-    "list_directory",
-    "get_diagnostics",
-];
-
-/// Write tools that are risky but not dangerous.
-const RISKY_TOOLS: &[&str] = &["write", "edit", "notebook_edit", "bash"];
-
 /// Dangerous command patterns for auto-mode (superset of permission.rs patterns).
 const AUTO_DANGEROUS_PATTERNS: &[&str] = &[
     "rm -rf",
@@ -317,7 +310,7 @@ impl AutoModeClassifier {
     /// Classify the risk level of a tool invocation using heuristics.
     pub fn classify(tool_name: &str, is_read_only: bool, input: &serde_json::Value) -> RiskLevel {
         // Read-only tools are always safe
-        if is_read_only || SAFE_TOOLS.contains(&tool_name) {
+        if is_read_only {
             return RiskLevel::Safe;
         }
 
@@ -337,11 +330,6 @@ impl AutoModeClassifier {
 
         // MCP tools are risky by default (external, untrusted)
         if tool_name.starts_with("mcp__") {
-            return RiskLevel::Risky;
-        }
-
-        // Known risky tools
-        if RISKY_TOOLS.contains(&tool_name) {
             return RiskLevel::Risky;
         }
 
@@ -862,15 +850,12 @@ mod tests {
     }
 
     #[test]
-    fn auto_classify_known_safe_tools() {
+    fn auto_classify_non_read_only_tool_is_risky_by_default() {
         let input = serde_json::json!({});
-        for tool in SAFE_TOOLS {
-            assert_eq!(
-                AutoModeClassifier::classify(tool, false, &input),
-                RiskLevel::Safe,
-                "tool {tool} should be safe"
-            );
-        }
+        assert_eq!(
+            AutoModeClassifier::classify("Read", false, &input),
+            RiskLevel::Risky
+        );
     }
 
     #[test]

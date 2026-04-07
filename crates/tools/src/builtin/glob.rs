@@ -8,11 +8,13 @@ use std::path::Path;
 use std::pin::Pin;
 
 /// File pattern matching tool.
+pub const GLOB_TOOL_NAME: &str = "Glob";
+
 pub struct GlobTool;
 
 impl Tool for GlobTool {
     fn name(&self) -> &'static str {
-        "glob"
+        GLOB_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -107,7 +109,7 @@ mod tests {
     #[test]
     fn glob_tool_metadata() {
         let tool = GlobTool;
-        assert_eq!(tool.name(), "glob");
+        assert_eq!(tool.name(), "Glob");
         assert!(tool.is_read_only());
         assert!(!tool.requires_confirmation());
         let schema = tool.input_schema();

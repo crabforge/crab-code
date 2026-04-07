@@ -6,6 +6,13 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
+pub const TASK_CREATE_TOOL_NAME: &str = "TaskCreate";
+pub const TASK_LIST_TOOL_NAME: &str = "TaskList";
+pub const TASK_GET_TOOL_NAME: &str = "TaskGet";
+pub const TASK_UPDATE_TOOL_NAME: &str = "TaskUpdate";
+pub const TASK_STOP_TOOL_NAME: &str = "TaskStop";
+pub const TASK_OUTPUT_TOOL_NAME: &str = "TaskOutput";
+
 // ── Task data model (self-contained within tools crate) ─────────────────
 
 /// Status of a task.
@@ -202,7 +209,7 @@ impl TaskCreateTool {
 
 impl Tool for TaskCreateTool {
     fn name(&self) -> &'static str {
-        "task_create"
+        TASK_CREATE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -259,7 +266,7 @@ impl TaskListTool {
 
 impl Tool for TaskListTool {
     fn name(&self) -> &'static str {
-        "task_list"
+        TASK_LIST_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -320,7 +327,7 @@ impl TaskGetTool {
 
 impl Tool for TaskGetTool {
     fn name(&self) -> &'static str {
-        "task_get"
+        TASK_GET_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -376,7 +383,7 @@ impl TaskUpdateTool {
 
 impl Tool for TaskUpdateTool {
     fn name(&self) -> &'static str {
-        "task_update"
+        TASK_UPDATE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -453,7 +460,7 @@ pub struct TaskStopTool;
 
 impl Tool for TaskStopTool {
     fn name(&self) -> &'static str {
-        "task_stop"
+        TASK_STOP_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -512,7 +519,7 @@ pub struct TaskOutputTool;
 
 impl Tool for TaskOutputTool {
     fn name(&self) -> &'static str {
-        "task_output"
+        TASK_OUTPUT_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -701,7 +708,7 @@ mod tests {
     #[test]
     fn task_stop_metadata() {
         let tool = TaskStopTool;
-        assert_eq!(tool.name(), "task_stop");
+        assert_eq!(tool.name(), "TaskStop");
         assert!(!tool.is_read_only());
     }
 
@@ -751,7 +758,7 @@ mod tests {
     #[test]
     fn task_output_metadata() {
         let tool = TaskOutputTool;
-        assert_eq!(tool.name(), "task_output");
+        assert_eq!(tool.name(), "TaskOutput");
         assert!(tool.is_read_only());
     }
 

@@ -8,6 +8,9 @@ use crab_common::Result;
 use crab_core::tool::{Tool, ToolContext, ToolOutput};
 use serde_json::Value;
 
+pub const NOTEBOOK_READ_TOOL_NAME: &str = "NotebookRead";
+pub const NOTEBOOK_EDIT_TOOL_NAME: &str = "NotebookEdit";
+
 // ─── NotebookReadTool ───────────────────────────────────────────────
 
 /// Reads a Jupyter notebook and returns cell contents in a readable format.
@@ -15,7 +18,7 @@ pub struct NotebookReadTool;
 
 impl Tool for NotebookReadTool {
     fn name(&self) -> &'static str {
-        "notebook_read"
+        NOTEBOOK_READ_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -230,7 +233,7 @@ pub struct NotebookTool;
 
 impl Tool for NotebookTool {
     fn name(&self) -> &'static str {
-        "notebook_edit"
+        NOTEBOOK_EDIT_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -469,7 +472,7 @@ mod tests {
     #[test]
     fn notebook_read_name_and_schema() {
         let tool = NotebookReadTool;
-        assert_eq!(tool.name(), "notebook_read");
+        assert_eq!(tool.name(), "NotebookRead");
         assert!(tool.is_read_only());
         let schema = tool.input_schema();
         let required = schema["required"].as_array().unwrap();
@@ -544,7 +547,7 @@ mod tests {
 
     #[test]
     fn notebook_edit_name() {
-        assert_eq!(NotebookTool.name(), "notebook_edit");
+        assert_eq!(NotebookTool.name(), "NotebookEdit");
         assert!(NotebookTool.requires_confirmation());
     }
 

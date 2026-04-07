@@ -28,11 +28,13 @@ const IMAGE_TYPES: &[(&str, &str)] = &[
 ];
 
 /// Tool that reads an image file and returns base64-encoded data for vision models.
+pub const IMAGE_READ_TOOL_NAME: &str = "ImageRead";
+
 pub struct ImageReadTool;
 
 impl Tool for ImageReadTool {
     fn name(&self) -> &'static str {
-        "image_read"
+        IMAGE_READ_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -280,7 +282,7 @@ mod tests {
     #[test]
     fn tool_metadata() {
         let tool = ImageReadTool;
-        assert_eq!(tool.name(), "image_read");
+        assert_eq!(tool.name(), "ImageRead");
         assert!(tool.is_read_only());
         assert!(!tool.description().is_empty());
     }

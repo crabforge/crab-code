@@ -9,11 +9,13 @@ use std::path::Path;
 use std::pin::Pin;
 
 /// Content search tool (regex-powered).
+pub const GREP_TOOL_NAME: &str = "Grep";
+
 pub struct GrepTool;
 
 impl Tool for GrepTool {
     fn name(&self) -> &'static str {
-        "grep"
+        GREP_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -229,7 +231,7 @@ mod tests {
     #[test]
     fn grep_tool_metadata() {
         let tool = GrepTool;
-        assert_eq!(tool.name(), "grep");
+        assert_eq!(tool.name(), "Grep");
         assert!(tool.is_read_only());
         assert!(!tool.requires_confirmation());
         let schema = tool.input_schema();

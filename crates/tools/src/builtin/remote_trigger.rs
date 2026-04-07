@@ -6,6 +6,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
+pub const REMOTE_TRIGGER_TOOL_NAME: &str = "RemoteTrigger";
+
 // ── Trigger data model ─────────────────────────────────────────────────
 
 /// A remote trigger definition.
@@ -119,7 +121,7 @@ impl RemoteTriggerTool {
 
 impl Tool for RemoteTriggerTool {
     fn name(&self) -> &'static str {
-        "remote_trigger"
+        REMOTE_TRIGGER_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -444,7 +446,7 @@ mod tests {
     fn tool_metadata() {
         let store = shared_trigger_store();
         let tool = RemoteTriggerTool::new(store);
-        assert_eq!(tool.name(), "remote_trigger");
+        assert_eq!(tool.name(), "RemoteTrigger");
         assert!(!tool.requires_confirmation());
         assert!(!tool.is_read_only());
     }

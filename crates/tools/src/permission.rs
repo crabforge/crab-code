@@ -1,5 +1,9 @@
 use std::path::Path;
 
+use crate::builtin::bash::BASH_TOOL_NAME;
+use crate::builtin::edit::EDIT_TOOL_NAME;
+use crate::builtin::notebook::NOTEBOOK_EDIT_TOOL_NAME;
+use crate::builtin::write::WRITE_TOOL_NAME;
 use crab_core::permission::{PermissionDecision, PermissionMode, PermissionPolicy};
 use crab_core::tool::ToolSource;
 
@@ -148,7 +152,10 @@ fn check_builtin_permission(
 
 /// Returns `true` if `tool_name` is a file-editing tool (write, edit, `notebook_edit`).
 fn is_file_edit_tool(tool_name: &str) -> bool {
-    matches!(tool_name, "write" | "edit" | "notebook_edit")
+    matches!(
+        tool_name,
+        WRITE_TOOL_NAME | EDIT_TOOL_NAME | NOTEBOOK_EDIT_TOOL_NAME
+    )
 }
 
 /// Check if the tool input contains a dangerous command pattern.
@@ -174,7 +181,7 @@ pub fn is_dangerous_command(input: &serde_json::Value) -> bool {
 fn is_path_in_project(tool_name: &str, input: &serde_json::Value, project_dir: &Path) -> bool {
     // BashTool: cannot reliably determine paths from shell commands,
     // so conservatively assume in-project (dangerous commands caught separately)
-    if tool_name == "bash" {
+    if tool_name == BASH_TOOL_NAME {
         return true;
     }
 

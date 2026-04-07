@@ -11,6 +11,9 @@ use crab_core::tool::{Tool, ToolContext, ToolOutput};
 use crab_process::spawn::{SpawnOptions, run};
 use serde_json::Value;
 
+pub const ENTER_WORKTREE_TOOL_NAME: &str = "EnterWorktree";
+pub const EXIT_WORKTREE_TOOL_NAME: &str = "ExitWorktree";
+
 // ─── EnterWorktreeTool ───────────────────────────────────────────────
 
 /// Creates a git worktree in `.crab/worktrees/<name>` with a new branch.
@@ -18,7 +21,7 @@ pub struct EnterWorktreeTool;
 
 impl Tool for EnterWorktreeTool {
     fn name(&self) -> &'static str {
-        "enter_worktree"
+        ENTER_WORKTREE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -141,7 +144,7 @@ pub struct ExitWorktreeTool;
 
 impl Tool for ExitWorktreeTool {
     fn name(&self) -> &'static str {
-        "exit_worktree"
+        EXIT_WORKTREE_TOOL_NAME
     }
 
     fn description(&self) -> &'static str {
@@ -316,7 +319,7 @@ mod tests {
     #[test]
     fn enter_worktree_metadata() {
         let tool = EnterWorktreeTool;
-        assert_eq!(tool.name(), "enter_worktree");
+        assert_eq!(tool.name(), "EnterWorktree");
         assert!(tool.requires_confirmation());
         assert!(!tool.description().is_empty());
     }
@@ -371,7 +374,7 @@ mod tests {
     #[test]
     fn exit_worktree_metadata() {
         let tool = ExitWorktreeTool;
-        assert_eq!(tool.name(), "exit_worktree");
+        assert_eq!(tool.name(), "ExitWorktree");
         assert!(tool.requires_confirmation());
         assert!(!tool.description().is_empty());
     }
