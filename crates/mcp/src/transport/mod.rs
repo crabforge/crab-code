@@ -1,4 +1,3 @@
-pub mod sse;
 pub mod stdio;
 
 #[cfg(feature = "ws")]

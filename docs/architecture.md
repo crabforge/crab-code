@@ -270,7 +270,7 @@ crab-code/
 │   │       ├── retry_strategy.rs      # 增强重试策略
 │   │       └── error_classifier.rs    # 错误分类（可重试/不可重试）
 │   │
-│   ├── mcp/                           # crab-mcp: MCP 协议
+│   ├── mcp/                           # crab-mcp: MCP façade + 协议适配层
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs
@@ -281,7 +281,6 @@ crab-code/
 │   │       ├── transport/
 │   │       │   ├── mod.rs
 │   │       │   ├── stdio.rs           # stdin/stdout 传输
-│   │       │   ├── sse.rs             # HTTP SSE 传输
 │   │       │   └── ws.rs              # WebSocket (feature)
 │   │       ├── resource.rs            # Resource 缓存、模板
 │   │       ├── discovery.rs           # Server 自动发现
@@ -1459,25 +1458,25 @@ proxy = ["reqwest/socks"]
 
 ---
 
-### 6.6 `crates/mcp/` — MCP 协议
+### 6.6 `crates/mcp/` — MCP façade
 
-**职责**：Model Context Protocol 完整实现（对标 CC `src/services/mcp/`）
+**职责**：Crab 自己的 MCP façade 与协议适配层（对标 CC `src/services/mcp/`）
 
-MCP 是让 LLM 连接外部工具/资源的开放协议，基于 JSON-RPC 2.0。
+MCP 是让 LLM 连接外部工具/资源的开放协议，基于 JSON-RPC 2.0。  
+`crab-mcp` 不把底层 SDK 直接暴露给 `cli` / `tools` / `session`，而是在 crate 内部吸收官方 SDK，实现稳定的 Crab 侧接口：`McpClient`、`McpManager`、`ToolRegistryHandler`、`mcp__<server>__<tool>` 命名与配置发现逻辑都留在这一层。
 
 **目录结构**
 
 ```
 src/
 ├── lib.rs
-├── protocol.rs             // MCP JSON-RPC 消息定义
-├── client.rs               // MCP 客户端（连接外部 MCP server）
-├── server.rs               // MCP 服务端（暴露自身工具给外部）
+├── protocol.rs             // Crab 自己的 MCP façade 类型
+├── client.rs               // MCP 客户端 façade（内部可委托 rmcp）
+├── server.rs               // MCP 服务端 façade（暴露自身工具给外部）
 ├── manager.rs              // 生命周期管理，多 server 协调
 ├── transport/
-│   ├── mod.rs              // Transport trait
-│   ├── stdio.rs            // stdin/stdout 传输
-│   ├── sse.rs              // HTTP SSE 传输
+│   ├── mod.rs              // 兼容用 Transport trait / 本地传输抽象
+│   ├── stdio.rs            // legacy stdin/stdout 传输
 │   └── ws.rs               // WebSocket 传输 (feature = "ws")
 ├── resource.rs             // Resource 缓存、模板
 ├── discovery.rs            // Server 自动发现
@@ -1493,6 +1492,14 @@ src/
 ├── cancellation.rs         // 请求取消机制（$/cancelRequest）
 └── health.rs               // 健康检查 + 心跳（自动重连）
 ```
+
+**边界原则**
+
+- `crab-mcp` 对外暴露的是 Crab 自己的 façade 类型，不是 `rmcp` 原生类型
+- client 侧 stdio / HTTP 连接优先复用官方 `rmcp`
+- 配置层只保留 `stdio` / `http` / `ws` 三种 transport
+- 上层 crate 只依赖 `crab_mcp::*`，不直接依赖底层 MCP SDK
+- `protocol.rs` 继续承载 Crab 侧稳定数据结构，避免 SDK 类型扩散
 
 **核心类型**
 
@@ -1574,27 +1581,22 @@ pub trait Transport: Send + Sync {
 ```
 
 ```rust
-// client.rs — MCP 客户端
-use crate::protocol::McpToolDef;
-use crate::transport::Transport;
+// client.rs — MCP 客户端 façade
+use crate::protocol::{McpToolDef, ServerCapabilities, ServerInfo};
 
 pub struct McpClient {
-    transport: Box<dyn Transport>,
     server_name: String,
+    server_info: ServerInfo,
+    capabilities: ServerCapabilities,
     tools: Vec<McpToolDef>,
 }
 
 impl McpClient {
-    /// 初始化连接，执行 handshake
-    pub async fn connect(
-        transport: Box<dyn Transport>,
-        server_name: &str,
-    ) -> crab_common::Result<Self> {
-        // 1. 发送 initialize 请求
-        // 2. 获取 server capabilities
-        // 3. 拉取 tools/list
-        // ...
-    }
+    /// 通过官方 SDK 连接 stdio MCP server
+    pub async fn connect_stdio(...) -> crab_common::Result<Self> { /* ... */ }
+
+    /// 通过官方 SDK 连接 HTTP MCP endpoint
+    pub async fn connect_streamable_http(...) -> crab_common::Result<Self> { /* ... */ }
 
     /// 调用 MCP 工具
     pub async fn call_tool(
@@ -1616,7 +1618,7 @@ impl McpClient {
 }
 ```
 
-**外部依赖**：`tokio`, `serde`, `serde_json`, `crab-core`, `crab-common`
+**外部依赖**：`tokio`, `serde`, `serde_json`, `rmcp`, `crab-core`, `crab-common`
 
 **Feature Flags**
 
@@ -3662,25 +3664,20 @@ use_field_init_shorthand = true
 ### 10.2 MCP 工具调用
 
 ```
-┌──────────┐  call_tool   ┌──────────┐  JSON-RPC    ┌──────────────┐
-│  tools   │─────────────►│   mcp    │─────────────►│  MCP Server  │
-│ executor │              │  client  │   request    │  (外部进程)   │
-└──────────┘              └────┬─────┘              └──────┬───────┘
-                               │                          │
-                               │         Transport        │
-                          ┌────▼─────────────────────┐    │
-                          │  ┌───────┐  ┌──────┐     │    │
-                          │  │ stdio │  │ SSE  │     │    │
-                          │  │  传输  │  │  传输 │     │    │
-                          │  └───┬───┘  └──┬───┘     │    │
-                          │      │         │         │    │
-                          │      ▼         ▼         │    │
-                          │    stdin/    HTTP POST    │    │
-                          │    stdout    /sse        │    │
-                          └──────────────────────────┘    │
-                                                          │
-                               ◄──────────────────────────┘
-                                   JSON-RPC response
+┌──────────┐  call_tool   ┌──────────┐  Crab façade  ┌──────────────┐
+│  tools   │─────────────►│   mcp    │──────────────►│  MCP Server  │
+│ executor │              │  client  │               │  (外部进程)   │
+└──────────┘              └────┬─────┘               └──────┬───────┘
+                               │                             │
+                               │     rmcp transport/client   │
+                          ┌────▼─────────────────────────┐   │
+                          │  stdio child process / HTTP  │   │
+                          │  handshake / tools/list      │   │
+                          │  tools/call / resources      │   │
+                          └──────────────────────────────┘   │
+                                                             │
+                               ◄─────────────────────────────┘
+                                     tool / resource result
 ```
 
 ### 10.3 上下文压缩决策流
@@ -3771,6 +3768,11 @@ use_field_init_shorthand = true
 
 MCP 协议扩展模块：
 
+- `crab-mcp` 是 Crab 的 MCP façade，不直接把底层 SDK 暴露给上层 crate
+- client 侧 stdio / HTTP 连接由官方 SDK 承接，Crab 负责配置发现、命名、权限接入与工具桥接
+- 配置主路径只保留 `stdio` / `http` / `ws`
+- server / prompt / resource / tool registry 仍保留 Crab 自己的抽象层
+
 | 模块 | 功能 |
 |------|------|
 | `handshake.rs` + `negotiation.rs` | initialize/initialized 握手，能力集协商 |
@@ -3826,6 +3828,3 @@ GCP 场景:
   gcp_identity.rs → Workload Identity Federation
   vertex_auth.rs → GCP Vertex AI 专用认证
 ```
-
-
-

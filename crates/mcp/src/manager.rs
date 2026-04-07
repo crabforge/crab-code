@@ -132,19 +132,10 @@ impl McpManager {
     /// Disconnect a specific server.
     pub async fn disconnect(&mut self, server_name: &str) -> crab_common::Result<()> {
         if let Some(client_arc) = self.clients.remove(server_name) {
-            // Try to get exclusive ownership — if other references exist,
-            // we can only close via the shared reference.
-            match Arc::try_unwrap(client_arc) {
-                Ok(mutex) => {
-                    let client = mutex.into_inner();
-                    client.close().await?;
-                }
-                Err(arc) => {
-                    // Other references still live (e.g. McpToolAdapter).
-                    // Close via the transport directly.
-                    arc.lock().await.transport().close().await?;
-                }
-            }
+            // Tool adapters may still hold a client reference, so shutdown
+            // must go through the shared mutex instead of reaching into a
+            // backend-specific transport.
+            client_arc.lock().await.close().await?;
             tracing::info!(server = server_name, "MCP server disconnected");
         }
         Ok(())

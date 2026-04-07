@@ -28,4 +28,6 @@ test-ledger
 temp/
 .playwright-mcp/
 **/.claude/
+**/.codex/
 CLAUDE.md
+AGENTS.md

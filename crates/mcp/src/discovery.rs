@@ -25,7 +25,7 @@ pub struct McpServerConfig {
 /// Settings format examples:
 /// ```json
 /// { "command": "npx", "args": ["-y", "@playwright/mcp"] }
-/// { "url": "https://mcp.example.com/sse" }
+/// { "url": "https://mcp.example.com/mcp" }
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -39,8 +39,8 @@ pub enum McpTransportConfig {
     /// WebSocket transport — connect to a remote WS/WSS endpoint.
     /// Config: `{ "ws_url": "ws://localhost:8080" }`
     Ws { ws_url: String },
-    /// SSE transport — connect to a remote HTTP SSE endpoint.
-    Sse { url: String },
+    /// Remote HTTP transport — connect to a remote MCP HTTP endpoint.
+    Http { url: String },
 }
 
 /// Parse MCP server configurations from a `mcpServers` JSON value.
@@ -54,7 +54,7 @@ pub enum McpTransportConfig {
 ///     "env": { "KEY": "value" }
 ///   },
 ///   "remote-server": {
-///     "url": "https://mcp.example.com/sse"
+///     "url": "https://mcp.example.com/mcp"
 ///   }
 /// }
 /// ```
@@ -93,10 +93,7 @@ pub fn parse_mcp_servers(
 pub async fn connect_server(config: &McpServerConfig) -> crab_common::Result<crate::McpClient> {
     match &config.transport {
         McpTransportConfig::Stdio { command, args } => {
-            let transport =
-                crate::transport::stdio::StdioTransport::spawn(command, args, config.env.as_ref())
-                    .await?;
-            crate::McpClient::connect(Box::new(transport), &config.name).await
+            crate::McpClient::connect_stdio(command, args, config.env.as_ref(), &config.name).await
         }
         #[cfg(feature = "ws")]
         McpTransportConfig::Ws { ws_url } => {
@@ -107,9 +104,8 @@ pub async fn connect_server(config: &McpServerConfig) -> crab_common::Result<cra
         McpTransportConfig::Ws { .. } => Err(crab_common::Error::Other(
             "WebSocket transport requires the 'ws' feature".into(),
         )),
-        McpTransportConfig::Sse { url } => {
-            let transport = crate::transport::sse::SseTransport::connect(url).await?;
-            crate::McpClient::connect(Box::new(transport), &config.name).await
+        McpTransportConfig::Http { url } => {
+            crate::McpClient::connect_streamable_http(url, &config.name).await
         }
     }
 }
@@ -139,10 +135,10 @@ mod tests {
     }
 
     #[test]
-    fn parse_sse_config() {
+    fn parse_http_config() {
         let value = json!({
             "remote": {
-                "url": "https://mcp.example.com/sse"
+                "url": "https://mcp.example.com/mcp"
             }
         });
 
@@ -151,7 +147,7 @@ mod tests {
         assert_eq!(configs[0].name, "remote");
         assert!(matches!(
             &configs[0].transport,
-            McpTransportConfig::Sse { url } if url == "https://mcp.example.com/sse"
+            McpTransportConfig::Http { url } if url == "https://mcp.example.com/mcp"
         ));
     }
 
@@ -176,7 +172,7 @@ mod tests {
     fn parse_multiple_servers() {
         let value = json!({
             "server-a": { "command": "a", "args": [] },
-            "server-b": { "url": "https://b.example.com/sse" },
+            "server-b": { "url": "https://b.example.com/mcp" },
             "server-c": { "command": "c" }
         });
 
@@ -231,17 +227,17 @@ mod tests {
     }
 
     #[test]
-    fn config_serde_roundtrip_sse() {
+    fn config_serde_roundtrip_http() {
         let config = McpServerConfig {
             name: String::new(),
-            transport: McpTransportConfig::Sse {
-                url: "https://example.com/sse".into(),
+            transport: McpTransportConfig::Http {
+                url: "https://example.com/mcp".into(),
             },
             env: None,
         };
 
         let json = serde_json::to_value(&config).unwrap();
-        assert_eq!(json["url"], "https://example.com/sse");
+        assert_eq!(json["url"], "https://example.com/mcp");
         // env should not appear when None
         assert!(json.get("env").is_none());
     }
@@ -282,7 +278,7 @@ mod tests {
     fn parse_mixed_transports() {
         let value = json!({
             "stdio-srv": { "command": "node", "args": ["server.js"] },
-            "sse-srv": { "url": "https://example.com/sse" },
+            "http-srv": { "url": "https://example.com/mcp" },
             "ws-srv": { "ws_url": "ws://localhost:9090" }
         });
 
@@ -291,7 +287,7 @@ mod tests {
 
         let names: Vec<&str> = configs.iter().map(|c| c.name.as_str()).collect();
         assert!(names.contains(&"stdio-srv"));
-        assert!(names.contains(&"sse-srv"));
+        assert!(names.contains(&"http-srv"));
         assert!(names.contains(&"ws-srv"));
     }
 }
