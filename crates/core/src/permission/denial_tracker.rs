@@ -9,6 +9,16 @@
 use std::time::Instant;
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/// Maximum consecutive denials before triggering a fallback warning.
+const MAX_CONSECUTIVE_DENIALS: u32 = 3;
+
+/// Maximum total denials before triggering a fallback warning.
+const MAX_TOTAL_DENIALS: usize = 20;
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -53,10 +63,12 @@ impl DenialTracker {
 
     /// Record a new denial event.
     pub fn record_denial(&mut self, tool_name: &str, reason: &str) {
-        todo!(
-            "Record denial for tool '{tool_name}' with reason '{reason}', \
-             increment consecutive_count, push DenialRecord"
-        )
+        self.consecutive_count += 1;
+        self.denials.push(DenialRecord {
+            tool_name: tool_name.to_string(),
+            timestamp: Instant::now(),
+            reason: reason.to_string(),
+        });
     }
 
     /// Return the number of consecutive denials since the last allow/reset.
@@ -67,14 +79,14 @@ impl DenialTracker {
     /// Check whether the denial count has reached a threshold that warrants
     /// a warning to the user or agent.
     ///
-    /// Default threshold: 3 consecutive denials.
+    /// Returns `true` if consecutive denials >= 3 or total denials >= 20.
     pub fn should_warn(&self) -> bool {
-        todo!("Return true if consecutive_count >= warning threshold (3)")
+        self.consecutive_count >= MAX_CONSECUTIVE_DENIALS || self.denials.len() >= MAX_TOTAL_DENIALS
     }
 
     /// Reset the consecutive denial counter (called after a successful allow).
     pub fn reset(&mut self) {
-        todo!("Reset consecutive_count to 0")
+        self.consecutive_count = 0;
     }
 
     /// Return a slice of all recorded denial records.
@@ -104,9 +116,79 @@ mod tests {
         assert!(tracker.history().is_empty());
     }
 
-    // Additional tests to be added with implementation:
-    // - record_denial increments consecutive_count
-    // - should_warn returns false below threshold
-    // - should_warn returns true at/above threshold
-    // - reset clears consecutive_count but preserves history
+    #[test]
+    fn record_denial_increments_counters() {
+        let mut tracker = DenialTracker::new();
+        tracker.record_denial("Bash", "denied by policy");
+        assert_eq!(tracker.consecutive_denials(), 1);
+        assert_eq!(tracker.total_denials(), 1);
+        assert_eq!(tracker.history()[0].tool_name, "Bash");
+        assert_eq!(tracker.history()[0].reason, "denied by policy");
+    }
+
+    #[test]
+    fn should_warn_false_below_threshold() {
+        let mut tracker = DenialTracker::new();
+        tracker.record_denial("Bash", "denied");
+        tracker.record_denial("Bash", "denied");
+        assert!(!tracker.should_warn());
+    }
+
+    #[test]
+    fn should_warn_true_at_consecutive_threshold() {
+        let mut tracker = DenialTracker::new();
+        for _ in 0..3 {
+            tracker.record_denial("Bash", "denied");
+        }
+        assert!(tracker.should_warn());
+    }
+
+    #[test]
+    fn should_warn_true_at_total_threshold() {
+        let mut tracker = DenialTracker::new();
+        for i in 0..20 {
+            tracker.record_denial("Bash", "denied");
+            // Reset consecutive every 2 to avoid hitting consecutive threshold
+            if i % 2 == 1 {
+                tracker.reset();
+            }
+        }
+        assert!(tracker.should_warn());
+    }
+
+    #[test]
+    fn reset_clears_consecutive_but_preserves_history() {
+        let mut tracker = DenialTracker::new();
+        tracker.record_denial("Bash", "denied");
+        tracker.record_denial("Bash", "denied");
+        assert_eq!(tracker.consecutive_denials(), 2);
+        assert_eq!(tracker.total_denials(), 2);
+
+        tracker.reset();
+        assert_eq!(tracker.consecutive_denials(), 0);
+        assert_eq!(tracker.total_denials(), 2); // history preserved
+    }
+
+    #[test]
+    fn reset_after_warn_clears_warning() {
+        let mut tracker = DenialTracker::new();
+        for _ in 0..3 {
+            tracker.record_denial("Bash", "denied");
+        }
+        assert!(tracker.should_warn());
+
+        tracker.reset();
+        assert!(!tracker.should_warn());
+    }
+
+    #[test]
+    fn multiple_tools_tracked() {
+        let mut tracker = DenialTracker::new();
+        tracker.record_denial("Bash", "policy");
+        tracker.record_denial("Edit", "read-only mode");
+        assert_eq!(tracker.total_denials(), 2);
+        assert_eq!(tracker.consecutive_denials(), 2);
+        assert_eq!(tracker.history()[0].tool_name, "Bash");
+        assert_eq!(tracker.history()[1].tool_name, "Edit");
+    }
 }
