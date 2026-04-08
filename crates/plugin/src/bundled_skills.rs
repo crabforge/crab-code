@@ -63,7 +63,31 @@ mod definitions {
 /// [`SkillRegistry`](super::skill::SkillRegistry) at startup before
 /// user/project skills are loaded (so user skills can override them).
 pub fn bundled_skills() -> Vec<Skill> {
-    todo!("bundled_skills: construct Skill instances from definitions::* constants")
+    let entries: &[(&str, &str)] = &[
+        ("commit", definitions::COMMIT),
+        ("review-pr", definitions::REVIEW_PR),
+        ("debug", definitions::DEBUG),
+        ("loop", definitions::LOOP),
+        ("remember", definitions::REMEMBER),
+        ("schedule", definitions::SCHEDULE),
+        ("simplify", definitions::SIMPLIFY),
+        ("stuck", definitions::STUCK),
+        ("verify", definitions::VERIFY),
+        ("update-config", definitions::UPDATE_CONFIG),
+    ];
+
+    entries
+        .iter()
+        .map(|(name, content)| Skill {
+            name: (*name).to_string(),
+            description: content.to_string(),
+            trigger: super::skill::SkillTrigger::Command {
+                name: (*name).to_string(),
+            },
+            content: content.to_string(),
+            source_path: None,
+        })
+        .collect()
 }
 
 /// Names of all bundled skills, for use in help text and listings.

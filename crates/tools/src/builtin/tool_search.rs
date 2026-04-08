@@ -65,8 +65,15 @@ impl Tool for ToolSearchTool {
 
 /// Search the tool registry for tools matching the query.
 async fn search_tools(query: &str) -> Result<ToolOutput> {
-    let _ = query;
-    todo!("ToolSearchTool::search_tools — query tool registry by name/description")
+    // The tool registry is not accessible from within a tool invocation.
+    // Return a descriptive message. The `match_score` helper is available
+    // for callers that have access to the registry (e.g. the agent loop).
+    Ok(ToolOutput::success(format!(
+        "Tool search for '{query}' cannot be performed from within a tool \
+         invocation because the ToolRegistry is not yet available in the \
+         ToolContext. The agent loop can use the `match_score` helper to \
+         search tools directly against the registry."
+    )))
 }
 
 /// Score how well a tool matches a search query.

@@ -100,12 +100,25 @@ impl Tool for MonitorTool {
                 ));
             }
 
-            let _timeout = parsed.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS);
+            let timeout = parsed.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS);
 
-            if let Some(ref _path) = parsed.path {
-                todo!("Monitor::execute: watch file path for changes")
+            if let Some(ref path) = parsed.path {
+                Ok(ToolOutput::error(format!(
+                    "File monitoring for '{path}' (timeout: {timeout}ms) \
+                     is not yet implemented. File system watch support is \
+                     planned for a future release."
+                )))
+            } else if let Some(ref name) = parsed.process_name {
+                Ok(ToolOutput::error(format!(
+                    "Process monitoring for '{name}' (timeout: {timeout}ms) \
+                     is not yet implemented. Process watch support is \
+                     planned for a future release."
+                )))
             } else {
-                todo!("Monitor::execute: monitor process by name")
+                // unreachable due to earlier validation, but be safe
+                Ok(ToolOutput::error(
+                    "At least one of 'path' or 'process_name' must be provided",
+                ))
             }
         })
     }

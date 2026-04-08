@@ -71,10 +71,37 @@ impl SkillBuilder {
     ///
     /// Returns `Err` if the skill name is empty or if no content was provided.
     pub fn build(self) -> Result<Skill, String> {
-        todo!(
-            "SkillBuilder::build: validate fields, resolve trigger from patterns, construct Skill for '{}'",
-            self.name
-        )
+        let name = self.name.trim().to_string();
+        if name.is_empty() {
+            return Err("skill name must not be empty".into());
+        }
+
+        let content = self
+            .content
+            .filter(|c| !c.trim().is_empty())
+            .ok_or("skill content must not be empty")?;
+
+        let trigger = if let Some(first) = self.trigger_patterns.first() {
+            if let Some(cmd) = first.strip_prefix('/') {
+                super::skill::SkillTrigger::Command {
+                    name: cmd.to_string(),
+                }
+            } else {
+                super::skill::SkillTrigger::Pattern {
+                    regex: first.clone(),
+                }
+            }
+        } else {
+            super::skill::SkillTrigger::Manual
+        };
+
+        Ok(Skill {
+            name,
+            description: self.description.unwrap_or_default(),
+            trigger,
+            content,
+            source_path: None,
+        })
     }
 }
 
@@ -90,8 +117,23 @@ impl SkillBuilder {
 /// * `server_name` — Name of the MCP server (used as skill name prefix).
 /// * `tools` — Array of MCP tool definition JSON objects (each with `name`,
 ///   `description`, etc.).
-pub fn load_mcp_skills(_server_name: &str, _tools: &[serde_json::Value]) -> Vec<Skill> {
-    todo!("load_mcp_skills: convert MCP tool definitions to Skill instances")
+pub fn load_mcp_skills(server_name: &str, tools: &[serde_json::Value]) -> Vec<Skill> {
+    tools
+        .iter()
+        .filter_map(|tool| {
+            let tool_name = tool.get("name")?.as_str()?;
+            let desc = tool
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let full_name = format!("{server_name}:{tool_name}");
+            SkillBuilder::new(full_name)
+                .description(desc)
+                .content(desc)
+                .build()
+                .ok()
+        })
+        .collect()
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────
@@ -125,5 +167,61 @@ mod tests {
         assert_eq!(builder.trigger_patterns.len(), 2);
         assert_eq!(builder.trigger_patterns[0], "/cmd");
         assert_eq!(builder.trigger_patterns[1], "pattern.*");
+    }
+
+    #[test]
+    fn build_command_trigger() {
+        let skill = SkillBuilder::new("test")
+            .content("prompt")
+            .trigger("/test")
+            .build()
+            .unwrap();
+        assert_eq!(skill.name, "test");
+        assert!(matches!(
+            skill.trigger,
+            super::super::skill::SkillTrigger::Command { .. }
+        ));
+    }
+
+    #[test]
+    fn build_manual_trigger() {
+        let skill = SkillBuilder::new("test").content("prompt").build().unwrap();
+        assert!(matches!(
+            skill.trigger,
+            super::super::skill::SkillTrigger::Manual
+        ));
+    }
+
+    #[test]
+    fn build_empty_name_fails() {
+        let result = SkillBuilder::new("").content("x").build();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn build_no_content_fails() {
+        let result = SkillBuilder::new("test").build();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_mcp_skills_basic() {
+        let tools = vec![serde_json::json!({
+            "name": "read_file",
+            "description": "Read a file from disk"
+        })];
+        let skills = load_mcp_skills("filesystem", &tools);
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].name, "filesystem:read_file");
+    }
+
+    #[test]
+    fn load_mcp_skills_skips_invalid() {
+        let tools = vec![
+            serde_json::json!({"name": "good", "description": "works"}),
+            serde_json::json!({"invalid": "no name field"}),
+        ];
+        let skills = load_mcp_skills("srv", &tools);
+        assert_eq!(skills.len(), 1);
     }
 }

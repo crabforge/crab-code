@@ -3,12 +3,14 @@
 //! Allows the LLM to create and update a structured TODO list with
 //! task descriptions and status tracking.
 
+use std::fmt::Write;
+use std::future::Future;
+use std::pin::Pin;
+
 use crab_common::Result;
 use crab_core::tool::{Tool, ToolContext, ToolOutput};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::future::Future;
-use std::pin::Pin;
 
 /// Tool name constant for `TodoWriteTool`.
 pub const TODO_WRITE_TOOL_NAME: &str = "TodoWrite";
@@ -111,8 +113,39 @@ impl Tool for TodoWriteTool {
 
 /// Persist the TODO list.
 async fn write_todos(todos: &[TodoItem]) -> Result<ToolOutput> {
-    let _ = todos;
-    todo!("TodoWriteTool::write_todos — persist TODO list to session state")
+    // Serialize the TODO list to JSON.
+    let json = serde_json::to_string_pretty(todos)
+        .map_err(|e| crab_common::Error::Tool(format!("failed to serialize TODO list: {e}")))?;
+
+    // Write to .crab/todos.json in the current working directory.
+    let crab_dir = std::path::Path::new(".crab");
+    if !crab_dir.exists() {
+        tokio::fs::create_dir_all(crab_dir).await.map_err(|e| {
+            crab_common::Error::Tool(format!("failed to create .crab directory: {e}"))
+        })?;
+    }
+    let path = crab_dir.join("todos.json");
+    tokio::fs::write(&path, &json).await.map_err(|e| {
+        crab_common::Error::Tool(format!("failed to write {}: {e}", path.display()))
+    })?;
+
+    // Build a summary of statuses.
+    let pending = todos.iter().filter(|t| t.status == "pending").count();
+    let in_progress = todos.iter().filter(|t| t.status == "in_progress").count();
+    let completed = todos.iter().filter(|t| t.status == "completed").count();
+    let cancelled = todos.iter().filter(|t| t.status == "cancelled").count();
+
+    let mut msg = String::new();
+    let _ = write!(
+        msg,
+        "TODO list updated ({} items): \
+         {pending} pending, {in_progress} in progress, \
+         {completed} completed, {cancelled} cancelled. \
+         Saved to {}",
+        todos.len(),
+        path.display()
+    );
+    Ok(ToolOutput::success(msg))
 }
 
 #[cfg(test)]

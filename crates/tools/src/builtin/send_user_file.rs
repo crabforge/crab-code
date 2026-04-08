@@ -4,12 +4,14 @@
 //! download or preview. Useful for generated reports, images, exported
 //! data, and build artifacts.
 
+use std::fmt::Write;
+use std::future::Future;
+use std::pin::Pin;
+
 use crab_common::Result;
 use crab_core::tool::{Tool, ToolContext, ToolOutput};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::future::Future;
-use std::pin::Pin;
 
 /// Tool name constant for `SendUserFileTool`.
 pub const SEND_USER_FILE_TOOL_NAME: &str = "SendUserFile";
@@ -79,10 +81,25 @@ impl Tool for SendUserFileTool {
             let parsed: SendUserFileInput = serde_json::from_value(input)
                 .map_err(|e| crab_common::Error::Tool(format!("Invalid input: {e}")))?;
 
-            todo!(
-                "SendUserFile::execute: read file '{}', package for user delivery",
-                parsed.file_path
-            )
+            let path = std::path::Path::new(&parsed.file_path);
+            if !path.exists() {
+                return Ok(ToolOutput::error(format!(
+                    "File not found: {}",
+                    parsed.file_path
+                )));
+            }
+
+            let content = tokio::fs::read_to_string(path).await.map_err(|e| {
+                crab_common::Error::Tool(format!("Failed to read '{}': {e}", parsed.file_path))
+            })?;
+
+            let mut header = String::new();
+            let _ = write!(header, "File: {}", parsed.file_path);
+            if let Some(ref desc) = parsed.description {
+                let _ = write!(header, "\nDescription: {desc}");
+            }
+            let _ = write!(header, "\n\n{content}");
+            Ok(ToolOutput::success(header))
         })
     }
 }

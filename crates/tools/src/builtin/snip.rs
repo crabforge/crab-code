@@ -70,8 +70,17 @@ impl Tool for SnipTool {
 
 /// Snip a tool output, either by message ID or the most recent large output.
 async fn snip_output(message_id: Option<&str>, max_chars: usize) -> Result<ToolOutput> {
-    let _ = (message_id, max_chars);
-    todo!("SnipTool::snip_output — locate target message and truncate with marker")
+    // Message history is managed by the agent loop and is not accessible
+    // from within a tool invocation. Return a descriptive message so the
+    // caller knows what was requested.
+    let target = message_id.unwrap_or("most recent large output");
+    Ok(ToolOutput::success(format!(
+        "Snip requested for '{target}' with max_chars={max_chars}. \
+         Message history is not yet accessible from within tool execution. \
+         The agent loop manages message history directly; this tool will \
+         be functional once session history is plumbed into the ToolContext. \
+         Use the `truncate_with_marker` helper for inline truncation."
+    )))
 }
 
 /// Truncate text and append a snip marker.

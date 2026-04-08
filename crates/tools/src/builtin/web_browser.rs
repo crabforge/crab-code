@@ -111,27 +111,21 @@ impl Tool for WebBrowserTool {
             let parsed: WebBrowserInput = serde_json::from_value(input)
                 .map_err(|e| crab_common::Error::Tool(format!("Invalid input: {e}")))?;
 
-            match parsed.action {
-                BrowserAction::Navigate => {
-                    let _url = parsed.url.as_deref().unwrap_or_default();
-                    todo!("WebBrowser::navigate: launch/reuse browser, navigate to URL")
-                }
-                BrowserAction::Click => {
-                    let _selector = parsed.selector.as_deref().unwrap_or_default();
-                    todo!("WebBrowser::click: find element by selector, click it")
-                }
-                BrowserAction::Type => {
-                    let _selector = parsed.selector.as_deref().unwrap_or_default();
-                    let _text = parsed.text.as_deref().unwrap_or_default();
-                    todo!("WebBrowser::type: find element, type text into it")
-                }
-                BrowserAction::Screenshot => {
-                    todo!("WebBrowser::screenshot: capture viewport, return as base64 image")
-                }
-                BrowserAction::Close => {
-                    todo!("WebBrowser::close: close browser session, release resources")
-                }
-            }
+            // All browser actions require Playwright MCP integration which
+            // is not yet wired up. Return a descriptive error instead of
+            // panicking so the agent loop can recover gracefully.
+            let action_label = match parsed.action {
+                BrowserAction::Navigate => "navigate",
+                BrowserAction::Click => "click",
+                BrowserAction::Type => "type",
+                BrowserAction::Screenshot => "screenshot",
+                BrowserAction::Close => "close",
+            };
+            Ok(ToolOutput::error(format!(
+                "Web browser action '{action_label}' requires Playwright MCP \
+                 integration which is not yet available. Consider adding a \
+                 Playwright MCP server to your .crab/settings.json instead."
+            )))
         })
     }
 }

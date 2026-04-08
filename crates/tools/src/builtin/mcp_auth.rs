@@ -78,20 +78,29 @@ impl Tool for McpAuthTool {
 
 /// Initiate authentication for an MCP server.
 async fn mcp_login(server_name: &str) -> Result<ToolOutput> {
-    let _ = server_name;
-    todo!("McpAuthTool::mcp_login — initiate OAuth2/API key auth flow")
+    Ok(ToolOutput::error(format!(
+        "MCP login for server '{server_name}' is not yet implemented. \
+         OAuth2 and API key authentication flows require the MCP server \
+         manager to be plumbed into the tool context."
+    )))
 }
 
 /// Revoke authentication for an MCP server.
 async fn mcp_logout(server_name: &str) -> Result<ToolOutput> {
-    let _ = server_name;
-    todo!("McpAuthTool::mcp_logout — revoke stored credentials")
+    Ok(ToolOutput::error(format!(
+        "MCP logout for server '{server_name}' is not yet implemented. \
+         Credential revocation requires the MCP server manager to be \
+         plumbed into the tool context."
+    )))
 }
 
 /// Check authentication status for an MCP server.
 async fn mcp_auth_status(server_name: &str) -> Result<ToolOutput> {
-    let _ = server_name;
-    todo!("McpAuthTool::mcp_auth_status — query credential store and token validity")
+    Ok(ToolOutput::error(format!(
+        "MCP auth status for server '{server_name}' is not yet implemented. \
+         Credential store queries require the MCP server manager to be \
+         plumbed into the tool context."
+    )))
 }
 
 #[cfg(test)]

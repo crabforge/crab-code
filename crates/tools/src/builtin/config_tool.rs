@@ -92,21 +92,99 @@ impl Tool for ConfigTool {
     }
 }
 
+/// Resolve a dot-separated key path in a JSON value.
+///
+/// For example, `"model"` returns the `model` field,
+/// and `"gitContext.enabled"` traverses into the nested object.
+fn resolve_dot_path<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+    let mut current = value;
+    for segment in key.split('.') {
+        current = current.get(segment)?;
+    }
+    Some(current)
+}
+
+/// Set a value at a dot-separated key path in a JSON object, creating
+/// intermediate objects as needed.
+fn set_dot_path(root: &mut Value, key: &str, new_value: Value) {
+    let segments: Vec<&str> = key.split('.').collect();
+    let mut current = root;
+    for &segment in &segments[..segments.len().saturating_sub(1)] {
+        if !current.get(segment).is_some_and(Value::is_object) {
+            current[segment] = Value::Object(serde_json::Map::new());
+        }
+        current = current.get_mut(segment).expect("just created");
+    }
+    if let Some(&last) = segments.last() {
+        current[last] = new_value;
+    }
+}
+
 /// Read a setting value by dot-separated key path.
 async fn get_setting(key: &str) -> Result<ToolOutput> {
-    let _ = key;
-    todo!("ConfigTool::get_setting — load merged config and resolve key path")
+    let settings = crab_config::settings::load_merged_settings(None)
+        .map_err(|e| crab_common::Error::Config(format!("failed to load merged settings: {e}")))?;
+    let json = serde_json::to_value(&settings)
+        .map_err(|e| crab_common::Error::Config(format!("failed to serialize settings: {e}")))?;
+
+    match resolve_dot_path(&json, key) {
+        Some(val) => {
+            let formatted = serde_json::to_string_pretty(val)
+                .map_err(|e| crab_common::Error::Config(format!("failed to format value: {e}")))?;
+            Ok(ToolOutput::success(formatted))
+        }
+        None => Ok(ToolOutput::error(format!("setting '{key}' not found"))),
+    }
 }
 
 /// Write a setting value by dot-separated key path.
 async fn set_setting(key: &str, value: &Value) -> Result<ToolOutput> {
-    let _ = (key, value);
-    todo!("ConfigTool::set_setting — update project-level settings.json")
+    let project_dir = std::path::Path::new(".crab");
+    if !project_dir.exists() {
+        tokio::fs::create_dir_all(project_dir).await.map_err(|e| {
+            crab_common::Error::Config(format!("failed to create .crab directory: {e}"))
+        })?;
+    }
+    let settings_path = project_dir.join("settings.json");
+
+    // Load existing project settings as raw JSON (or start with empty object).
+    let mut root: Value = if settings_path.exists() {
+        let content = tokio::fs::read_to_string(&settings_path)
+            .await
+            .map_err(|e| {
+                crab_common::Error::Config(format!(
+                    "failed to read {}: {e}",
+                    settings_path.display()
+                ))
+            })?;
+        serde_json::from_str(&content).unwrap_or(Value::Object(serde_json::Map::new()))
+    } else {
+        Value::Object(serde_json::Map::new())
+    };
+
+    set_dot_path(&mut root, key, value.clone());
+
+    let output = serde_json::to_string_pretty(&root)
+        .map_err(|e| crab_common::Error::Config(format!("failed to serialize settings: {e}")))?;
+    tokio::fs::write(&settings_path, &output)
+        .await
+        .map_err(|e| {
+            crab_common::Error::Config(format!("failed to write {}: {e}", settings_path.display()))
+        })?;
+
+    Ok(ToolOutput::success(format!(
+        "Setting '{key}' updated in {}",
+        settings_path.display()
+    )))
 }
 
 /// List all current settings.
 async fn list_settings() -> Result<ToolOutput> {
-    todo!("ConfigTool::list_settings — dump merged config as formatted JSON")
+    let settings = crab_config::settings::load_merged_settings(None)
+        .map_err(|e| crab_common::Error::Config(format!("failed to load merged settings: {e}")))?;
+    let json = serde_json::to_string_pretty(&settings)
+        .map_err(|e| crab_common::Error::Config(format!("failed to serialize settings: {e}")))?;
+    Ok(ToolOutput::success(json))
 }
 
 #[cfg(test)]

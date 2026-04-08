@@ -58,8 +58,22 @@ impl Tool for BriefTool {
 
 /// Generate a brief summary for the given scope.
 async fn generate_brief(scope: &str) -> Result<ToolOutput> {
-    let _ = scope;
-    todo!("BriefTool::generate_brief — extract conversation history and produce summary")
+    // Conversation history is managed by the agent loop and is not yet
+    // accessible from within a tool invocation. Return a descriptive
+    // message so the caller knows what was requested.
+    let scope_desc = match scope {
+        "recent" => "the most recent conversation turns",
+        "tools" => "tool usage throughout the conversation",
+        "all" => "the entire conversation",
+        other => other,
+    };
+    Ok(ToolOutput::success(format!(
+        "Brief requested for scope: {scope_desc}. \
+         Conversation history is not yet accessible from within tool \
+         execution. The agent loop manages message history directly; \
+         this tool will be functional once session history is plumbed \
+         into the ToolContext."
+    )))
 }
 
 #[cfg(test)]

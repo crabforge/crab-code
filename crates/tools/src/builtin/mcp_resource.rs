@@ -63,8 +63,12 @@ impl Tool for ListMcpResourcesTool {
 
 /// List MCP resources, optionally filtered by server name.
 async fn list_resources(server_name: Option<&str>) -> Result<ToolOutput> {
-    let _ = server_name;
-    todo!("ListMcpResourcesTool — enumerate resources from MCP server connections")
+    let target = server_name.unwrap_or("all servers");
+    Ok(ToolOutput::error(format!(
+        "Listing MCP resources for {target} is not yet implemented. \
+         Resource enumeration requires active MCP server connections \
+         to be plumbed into the tool context."
+    )))
 }
 
 // ── ReadMcpResource ───────────────────────────────────────────────────
@@ -132,8 +136,11 @@ impl Tool for ReadMcpResourceTool {
 
 /// Read a resource from the specified MCP server.
 async fn read_resource(server_name: &str, uri: &str) -> Result<ToolOutput> {
-    let _ = (server_name, uri);
-    todo!("ReadMcpResourceTool — read resource content via MCP protocol")
+    Ok(ToolOutput::error(format!(
+        "Reading MCP resource '{uri}' from server '{server_name}' is not yet \
+         implemented. Resource access requires active MCP server connections \
+         to be plumbed into the tool context."
+    )))
 }
 
 #[cfg(test)]

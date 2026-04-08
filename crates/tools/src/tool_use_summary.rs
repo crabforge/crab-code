@@ -30,8 +30,29 @@ pub fn should_summarize(result: &str, threshold: usize) -> bool {
 /// - `max_tokens`: Approximate token budget for the summary
 #[must_use]
 pub fn summarize_tool_result(tool_name: &str, result: &str, max_tokens: usize) -> String {
-    let _ = (tool_name, result, max_tokens);
-    todo!("summarize_tool_result — implement per-tool summarization strategies")
+    // Convert token budget to approximate character budget (4 chars/token).
+    let char_budget = max_tokens.saturating_mul(4);
+
+    // If the result already fits, return it unchanged.
+    if result.len() <= char_budget {
+        return result.to_owned();
+    }
+
+    // Allocate head and tail portions based on the tool type.
+    // Shell tools benefit from seeing the tail (exit codes, final output).
+    // File/search tools benefit from seeing the head (path, match counts).
+    let (head_ratio, tail_ratio) = match tool_name {
+        "Bash" | "bash" => (3, 7),                   // tail-heavy for shell output
+        "Read" | "read" | "Glob" | "glob" => (7, 3), // head-heavy for file content
+        "Grep" | "grep" => (5, 5),                   // balanced for search results
+        _ => (6, 4),                                 // default slightly head-heavy
+    };
+
+    let total_ratio = head_ratio + tail_ratio;
+    let head_chars = char_budget * head_ratio / total_ratio;
+    let tail_chars = char_budget.saturating_sub(head_chars);
+
+    head_tail_summary(result, head_chars, tail_chars)
 }
 
 /// Estimate the number of tokens in a string (rough approximation).

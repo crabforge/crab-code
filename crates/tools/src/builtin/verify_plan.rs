@@ -91,8 +91,49 @@ impl Tool for VerifyPlanExecutionTool {
 
 /// Verify plan execution by loading the plan and checking step statuses.
 async fn verify_plan(plan_file: &str) -> Result<ToolOutput> {
-    let _ = plan_file;
-    todo!("VerifyPlanExecutionTool::verify_plan — load plan, check steps, return report")
+    let path = std::path::Path::new(plan_file);
+    let content = tokio::fs::read_to_string(path).await.map_err(|e| {
+        crab_common::Error::Tool(format!("failed to read plan file '{plan_file}': {e}"))
+    })?;
+
+    // Parse markdown-style checkboxes: `- [x]` (done) and `- [ ]` (pending).
+    let mut steps = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed
+            .strip_prefix("- [x] ")
+            .or_else(|| trimmed.strip_prefix("- [X] "))
+        {
+            steps.push(StepVerification {
+                step: rest.to_owned(),
+                passed: true,
+                detail: "Marked as completed".to_owned(),
+            });
+        } else if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
+            steps.push(StepVerification {
+                step: rest.to_owned(),
+                passed: false,
+                detail: "Not yet completed".to_owned(),
+            });
+        }
+    }
+
+    let total_steps = steps.len();
+    let passed_steps = steps.iter().filter(|s| s.passed).count();
+    let failed_steps = total_steps - passed_steps;
+
+    let report = PlanVerification {
+        plan_file: plan_file.to_owned(),
+        total_steps,
+        passed_steps,
+        failed_steps,
+        steps,
+    };
+
+    let json = serde_json::to_string_pretty(&report).map_err(|e| {
+        crab_common::Error::Tool(format!("failed to serialize verification report: {e}"))
+    })?;
+    Ok(ToolOutput::success(json))
 }
 
 #[cfg(test)]

@@ -78,10 +78,12 @@ impl Tool for WorkflowTool {
             let parsed: WorkflowInput = serde_json::from_value(input)
                 .map_err(|e| crab_common::Error::Tool(format!("Invalid input: {e}")))?;
 
-            todo!(
-                "Workflow::execute: look up workflow '{}' and run its steps",
+            Ok(ToolOutput::error(format!(
+                "Workflow '{}' execution is not yet implemented. \
+                 Workflow definitions and the step runner are planned \
+                 for a future release.",
                 parsed.name
-            )
+            )))
         })
     }
 }
