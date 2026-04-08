@@ -207,12 +207,15 @@ crab-code/
 │   ├── common/                        # crab-common: shared foundation
 │   │   ├── Cargo.toml
 │   │   └── src/
-│   │       ├── lib.rs
+│   │       ├── lib.rs                 # exports error, result, utils
 │   │       ├── error.rs               # thiserror unified error enum
 │   │       ├── result.rs              # type Result<T>
-│   │       ├── text.rs                # Unicode width, ANSI strip
-│   │       ├── path.rs                # cross-platform path normalization
-│   │       └── id.rs                  # ULID generation
+│   │       └── utils/                 # utility functions (no business semantics)
+│   │           ├── mod.rs
+│   │           ├── id.rs              # ULID generation
+│   │           ├── path.rs            # cross-platform path normalization
+│   │           ├── text.rs            # Unicode width, ANSI strip
+│   │           └── debug.rs           # debug categories, tracing init
 │   │
 │   ├── core/                          # crab-core: domain model
 │   │   ├── Cargo.toml
