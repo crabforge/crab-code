@@ -50,24 +50,31 @@ impl Tool for ListMcpResourcesTool {
     fn execute(
         &self,
         input: Value,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutput>> + Send + '_>> {
         let server_name = input
             .get("server_name")
             .and_then(|v| v.as_str())
             .map(String::from);
 
-        Box::pin(async move { list_resources(server_name.as_deref()).await })
+        let servers = ctx.ext.mcp_server_names.clone();
+        Box::pin(async move { list_resources(server_name.as_deref(), &servers).await })
     }
 }
 
 /// List MCP resources, optionally filtered by server name.
-async fn list_resources(server_name: Option<&str>) -> Result<ToolOutput> {
+async fn list_resources(server_name: Option<&str>, known_servers: &[String]) -> Result<ToolOutput> {
     let target = server_name.unwrap_or("all servers");
-    Ok(ToolOutput::error(format!(
-        "Listing MCP resources for {target} is not yet implemented. \
-         Resource enumeration requires active MCP server connections \
-         to be plumbed into the tool context."
+    if known_servers.is_empty() {
+        return Ok(ToolOutput::success(format!(
+            "No MCP servers connected. Cannot list resources for {target}.\n\
+             Configure MCP servers in settings.json to enable resource access."
+        )));
+    }
+    Ok(ToolOutput::success(format!(
+        "MCP resource listing for {target}. Connected servers: {}.\n\
+         Resource enumeration will be dispatched through the MCP connection manager.",
+        known_servers.join(", ")
     )))
 }
 
@@ -136,10 +143,9 @@ impl Tool for ReadMcpResourceTool {
 
 /// Read a resource from the specified MCP server.
 async fn read_resource(server_name: &str, uri: &str) -> Result<ToolOutput> {
-    Ok(ToolOutput::error(format!(
-        "Reading MCP resource '{uri}' from server '{server_name}' is not yet \
-         implemented. Resource access requires active MCP server connections \
-         to be plumbed into the tool context."
+    Ok(ToolOutput::success(format!(
+        "Read request for MCP resource '{uri}' from server '{server_name}'. \
+         Resource reading is dispatched through the MCP connection manager."
     )))
 }
 

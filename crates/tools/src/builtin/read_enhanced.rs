@@ -276,30 +276,58 @@ pub enum PdfReadResult {
 
 /// Attempt to extract text from a PDF file.
 ///
-/// This is currently a skeleton that returns a helpful fallback message.
-/// A real implementation would integrate a PDF parsing library (e.g. `pdf-extract`
-/// or `lopdf`).
+/// Uses `pdf-extract` when the `pdf` feature is enabled, otherwise
+/// returns a fallback message suggesting alternatives.
 #[must_use]
 pub fn read_pdf(path: &Path, page_range: Option<(usize, usize)>) -> PdfReadResult {
-    let range_desc = page_range.map_or_else(
-        || "all pages".to_owned(),
-        |(start, end)| format!("pages {start}-{end}"),
-    );
-
-    PdfReadResult::Unavailable {
-        message: format!(
-            "PDF reading not yet implemented.\n\
-             File: {}\n\
-             Requested: {range_desc}\n\
-             \n\
-             To read this PDF, you can:\n\
-             - Use an external tool: `pdftotext {} -` (if available)\n\
-             - Use the bash tool to run a PDF extraction command\n\
-             - Install a PDF reading plugin via MCP",
-            path.display(),
-            path.display()
-        ),
+    #[cfg(feature = "pdf")]
+    {
+        read_pdf_impl(path, page_range)
     }
+    #[cfg(not(feature = "pdf"))]
+    {
+        let range_desc = page_range.map_or_else(
+            || "all pages".to_owned(),
+            |(start, end)| format!("pages {start}-{end}"),
+        );
+        PdfReadResult::Unavailable {
+            message: format!(
+                "PDF reading requires the 'pdf' feature. File: {}, requested: {range_desc}.\n\
+                 Build with: cargo build --features pdf\n\
+                 Or use: pdftotext {} - (if available)",
+                path.display(),
+                path.display()
+            ),
+        }
+    }
+}
+
+/// Real PDF extraction using the `pdf-extract` crate.
+#[cfg(feature = "pdf")]
+fn read_pdf_impl(path: &Path, page_range: Option<(usize, usize)>) -> PdfReadResult {
+    let Ok(text) = pdf_extract::extract_text(path) else {
+        return PdfReadResult::Unavailable {
+            message: format!("Failed to extract text from PDF: {}", path.display()),
+        };
+    };
+
+    let all_pages: Vec<&str> = text.split('\x0C').collect(); // Form feed separates pages
+    let total = all_pages.len().max(1);
+
+    let (start, end) = page_range.unwrap_or((1, total));
+    let start_idx = start.saturating_sub(1);
+    let end_idx = end.min(total);
+
+    let pages: Vec<PdfPage> = all_pages[start_idx..end_idx]
+        .iter()
+        .enumerate()
+        .map(|(i, text)| PdfPage {
+            number: start + i,
+            text: (*text).to_string(),
+        })
+        .collect();
+
+    PdfReadResult::Success { pages, total }
 }
 
 /// Parse a page range string like "1-5", "3", "10-20".
