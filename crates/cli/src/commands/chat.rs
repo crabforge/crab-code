@@ -227,7 +227,6 @@ pub async fn run_chat(config: ChatConfig) -> anyhow::Result<()> {
     #[cfg(not(feature = "tui"))]
     {
         use crab_agent::AgentSession;
-        use crab_tools::executor::PermissionHandler;
 
         let mut session = AgentSession::new(session_config, backend, registry);
         // In non-TUI mode, use a simple stdin-based permission handler.

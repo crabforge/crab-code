@@ -1,18 +1,46 @@
 #!/usr/bin/env bash
-# Pre-commit hook: enforces fmt + clippy before every commit.
+# Pre-commit hook: mirrors CI check&lint steps exactly.
 # Install: git config core.hooksPath .githooks
+#
+# CI equivalence (see .github/workflows/ci.yml):
+#   env: RUSTFLAGS=-Dwarnings
+#   1. cargo fmt --all --check
+#   2. cargo clippy --workspace -- -D warnings
+#   3. cargo check --workspace
+#   4. cargo check -p crab-cli --no-default-features
+#   5. cargo check -p crab-cli -F full
 set -e
 
-echo "==> Running cargo fmt --check..."
+export RUSTFLAGS="-Dwarnings"
+
+echo "==> [1/5] cargo fmt --check..."
 cargo fmt --all --check || {
     echo "ERROR: cargo fmt check failed. Run 'cargo fmt --all' to fix."
     exit 1
 }
 
-echo "==> Running cargo clippy (warnings = errors)..."
-RUSTFLAGS="-Dwarnings" cargo clippy --workspace --quiet || {
+echo "==> [2/5] cargo clippy (warnings = errors)..."
+cargo clippy --workspace --quiet -- -D warnings || {
     echo "ERROR: clippy check failed. Fix all warnings before committing."
     exit 1
 }
 
-echo "==> Pre-commit checks passed."
+echo "==> [3/5] cargo check --workspace..."
+cargo check --workspace --quiet || {
+    echo "ERROR: cargo check --workspace failed."
+    exit 1
+}
+
+echo "==> [4/5] cargo check --no-default-features..."
+cargo check -p crab-cli --no-default-features --quiet || {
+    echo "ERROR: crab-cli fails to compile without default features."
+    exit 1
+}
+
+echo "==> [5/5] cargo check -F full..."
+cargo check -p crab-cli -F full --quiet || {
+    echo "ERROR: crab-cli fails to compile with full features."
+    exit 1
+}
+
+echo "==> Pre-commit checks passed (all 5 CI steps)."
