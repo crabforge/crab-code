@@ -105,10 +105,10 @@ pub fn render_ascii(sprite: &Sprite) -> Vec<String> {
     };
 
     let body = match sprite.species {
-        Species::Crab => format!("/V{eyes}V\\"),
-        Species::Octopus => format!(" {eyes}\n /||||\\"),
-        Species::Robot => format!("[{eyes}]\n |____|"),
-        Species::Fox => format!(" /\\{eyes}/\\\n  (  )"),
+        Species::Crab => format!("  ╱▔╲{eyes}╱▔╲\n  ╲_╱ ███ ╲_╱\n    ╱╱   ╲╲"),
+        Species::Octopus => format!("  {eyes}\n /||||\\"),
+        Species::Robot => format!(" [{eyes}]\n |____|"),
+        Species::Fox => format!(" /\\{eyes}/\\\n   (  )"),
     };
 
     let mut lines = Vec::new();

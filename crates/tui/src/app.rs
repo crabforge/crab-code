@@ -632,11 +632,11 @@ const CRAB_BG: Color = Color::Black;
 
 /// Render the header: crab art (left) + info text (right) + separator.
 ///
-/// Matches CC's `CondensedLogo` — no border box, just flat content:
+/// Crab logo using Unicode block/box characters:
 /// ```text
-///  ╲▐▛█▜▌╱   Crab Code v0.1.0
-///   ▝█████▘  claude-sonnet-4-6
-///    ▝▘ ▘▝   C:\path\to\project
+///  ╱▔╲ ● ● ╱▔╲  Crab Code v0.1.0
+///  ╲▂╱╲███╱╲▂╱  claude-sonnet-4-6
+///    ╱╱ ███ ╲╲   C:\path\to\project
 /// ────────────────────────────────────────
 /// ```
 #[allow(clippy::cast_possible_truncation)]
@@ -646,25 +646,28 @@ fn render_header(model_name: &str, working_dir: &str, area: Rect, buf: &mut Buff
     }
 
     let fg = Style::default().fg(CRAB_COLOR);
+    let eye = Style::default().fg(Color::White);
     let fg_bg = Style::default().fg(CRAB_COLOR).bg(CRAB_BG);
 
-    // Crab art — 3 rows using block chars (same approach as CC's Clawd).
-    // ╲/╱ = claws, ▐▛█▜▌ = shell with bg color.
+    // Crab art — 3 rows: claws + eyes on top, shell in middle, legs below
     let art_lines: [Line<'_>; 3] = [
+        // Row 1: claws and eyes
         Line::from(vec![
-            Span::styled(" ╲", fg),
-            Span::styled("▐▛█▜▌", fg_bg),
-            Span::styled("╱  ", fg),
+            Span::styled(" ╱▔╲", fg),
+            Span::styled(" ● ● ", eye),
+            Span::styled("╱▔╲ ", fg),
         ]),
+        // Row 2: claws wrapping the shell
         Line::from(vec![
-            Span::styled("  ▝", fg),
-            Span::styled("█████", fg_bg),
-            Span::styled("▘  ", fg),
+            Span::styled(" ╲▂╱", fg),
+            Span::styled("╲███╱", fg_bg),
+            Span::styled("╲▂╱ ", fg),
         ]),
-        Line::from(Span::styled("   ▝▘ ▘▝   ", fg)),
+        // Row 3: legs
+        Line::from(Span::styled("   ╱╱ ███ ╲╲  ", fg)),
     ];
 
-    let art_width = 13u16;
+    let art_width = 15u16;
 
     // Info text beside the art (mirrors CC's CondensedLogo text)
     let text_budget = area.width.saturating_sub(art_width) as usize;
