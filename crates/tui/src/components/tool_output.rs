@@ -9,6 +9,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
 
+use super::output_styles::{ContentType, OutputStyles};
+
 /// Maximum number of lines to show before collapsing.
 const COLLAPSE_THRESHOLD: usize = 5;
 /// Number of preview lines to show when collapsed.
@@ -183,19 +185,41 @@ pub fn render_tool_output(
     area: Rect,
     buf: &mut Buffer,
 ) {
+    render_tool_output_styled(entry, is_selected, None, area, buf);
+}
+
+/// Render a single tool output entry using centralized [`OutputStyles`].
+pub fn render_tool_output_styled(
+    entry: &ToolOutputEntry,
+    is_selected: bool,
+    styles: Option<&OutputStyles>,
+    area: Rect,
+    buf: &mut Buffer,
+) {
     if area.height == 0 {
         return;
     }
 
     let mut y = area.y;
 
-    // Header line
+    // Header line — use OutputStyles when available, fall back to hardcoded colors
     let header_style = if entry.is_error {
-        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+        styles.map_or_else(
+            || Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            |s| s.style_for(ContentType::Error),
+        )
     } else {
-        Style::default()
-            .fg(Color::Blue)
-            .add_modifier(Modifier::BOLD)
+        styles.map_or_else(
+            || {
+                Style::default()
+                    .fg(Color::Blue)
+                    .add_modifier(Modifier::BOLD)
+            },
+            |s| {
+                s.style_for(ContentType::ToolResult)
+                    .add_modifier(Modifier::BOLD)
+            },
+        )
     };
 
     let selection_indicator = if is_selected { ">" } else { " " };
@@ -235,9 +259,15 @@ pub fn render_tool_output(
             break;
         }
         let content_style = if entry.is_error {
-            Style::default().fg(Color::Red)
+            styles.map_or_else(
+                || Style::default().fg(Color::Red),
+                |s| s.style_for(ContentType::Error),
+            )
         } else {
-            Style::default().fg(Color::Gray)
+            styles.map_or_else(
+                || Style::default().fg(Color::Gray),
+                |s| s.style_for(ContentType::ToolResult),
+            )
         };
         let line = Line::from(Span::styled(format!("  {line_text}"), content_style));
         let line_area = Rect {
@@ -254,11 +284,20 @@ pub fn render_tool_output(
     if entry.is_collapsible() && !entry.expanded && y < area.y + area.height {
         let total_lines = entry.output.lines().count();
         let hidden = total_lines.saturating_sub(PREVIEW_LINES);
+        let muted_style = styles.map_or_else(
+            || {
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::ITALIC)
+            },
+            |s| {
+                s.style_for(ContentType::Muted)
+                    .add_modifier(Modifier::ITALIC)
+            },
+        );
         let footer = Line::from(Span::styled(
             format!("  ... {hidden} more lines (Enter to expand)"),
-            Style::default()
-                .fg(Color::DarkGray)
-                .add_modifier(Modifier::ITALIC),
+            muted_style,
         ));
         let footer_area = Rect {
             x: area.x,

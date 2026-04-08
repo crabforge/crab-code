@@ -16,9 +16,12 @@ use crab_tools::builtin::write::WRITE_TOOL_NAME;
 
 use crate::components::autocomplete::{AutoComplete, CommandInfo};
 use crate::components::code_block::{CodeBlockTracker, ImagePlaceholder};
+use crate::components::context_collapse::{CollapsibleSection, ContextCollapse};
 use crate::components::dialog::{PermissionDialog, PermissionResponse, RiskLevel};
 use crate::components::input::InputBox;
+use crate::components::output_styles::{ContentType, OutputStyles};
 use crate::components::search::{self, SearchState};
+use crate::components::session_sidebar::SessionSidebar;
 use crate::components::spinner::Spinner;
 use crate::components::tool_output::{ToolOutputEntry, ToolOutputList};
 use crate::event::TuiEvent;
@@ -75,6 +78,8 @@ pub struct App {
     current_tool: Option<String>,
     /// Whether the sidebar is visible.
     pub sidebar_visible: bool,
+    /// Session sidebar component (session list + navigation).
+    pub session_sidebar: SessionSidebar,
     /// Current session ID.
     pub session_id: String,
     /// Keybinding configuration.
@@ -95,6 +100,10 @@ pub struct App {
     pub image_placeholders: Vec<ImagePlaceholder>,
     /// Tab-completion engine for `/commands` and file paths.
     pub autocomplete: AutoComplete,
+    /// Collapsible context sections for long tool outputs in the transcript.
+    pub context_collapse: ContextCollapse,
+    /// Centralized output style registry for content rendering.
+    pub output_styles: OutputStyles,
     /// Working directory (displayed in header).
     pub working_dir: String,
 }
@@ -113,6 +122,7 @@ impl App {
             should_quit: false,
             current_tool: None,
             sidebar_visible: false,
+            session_sidebar: SessionSidebar::new(),
             session_id: String::new(),
             keybindings: Keybindings::defaults(),
             total_input_tokens: 0,
@@ -123,6 +133,8 @@ impl App {
             search: SearchState::new(),
             image_placeholders: Vec::new(),
             autocomplete: AutoComplete::default(),
+            context_collapse: ContextCollapse::new(Vec::new()),
+            output_styles: OutputStyles::default_styles(),
             working_dir: String::new(),
         }
     }
@@ -190,6 +202,7 @@ impl App {
                 }
                 Action::ToggleSidebar => {
                     self.sidebar_visible = !self.sidebar_visible;
+                    self.session_sidebar.visible = self.sidebar_visible;
                     return AppAction::None;
                 }
                 Action::ScrollUp if self.state != AppState::Confirming => {
@@ -450,6 +463,11 @@ impl App {
                     let _ = writeln!(self.content_buffer, "[tool error] {text}");
                     self.tool_outputs
                         .push(ToolOutputEntry::new(&tool_name, text.clone(), true));
+                    // Add to context collapse as a collapsible error section
+                    let mut section =
+                        CollapsibleSection::new(format!("Tool error: {tool_name}"), text.clone());
+                    section.collapsed = true;
+                    self.context_collapse.push_section(section);
                 } else if !text.is_empty() {
                     // Truncate long output for display
                     if text.len() > 500 {
@@ -463,6 +481,15 @@ impl App {
                     }
                     self.tool_outputs
                         .push(ToolOutputEntry::new(&tool_name, text.clone(), false));
+                    // Add long tool outputs to context collapse (auto-collapsed)
+                    if text.lines().count() > 5 {
+                        let mut section = CollapsibleSection::new(
+                            format!("Tool output: {tool_name}"),
+                            text.clone(),
+                        );
+                        section.collapsed = true;
+                        self.context_collapse.push_section(section);
+                    }
                 }
                 // Update code block detection
                 self.code_blocks.update(&self.content_buffer);
@@ -544,15 +571,16 @@ impl App {
         // Header (3 lines art/info + 1 line separator, no border box)
         render_header(&self.model_name, &self.working_dir, layout.header, buf);
 
-        // Sidebar placeholder
-        if let Some(_sidebar_area) = layout.sidebar {
-            // Session panel rendering is a no-op for now.
+        // Session sidebar
+        if let Some(sidebar_area) = layout.sidebar {
+            Widget::render(&self.session_sidebar, sidebar_area, buf);
         }
 
         // Content area with scroll support
         render_content_scrolled(
             &self.content_buffer,
             self.content_scroll,
+            &self.output_styles,
             layout.content,
             buf,
         );
@@ -757,7 +785,13 @@ fn render_input_with_prompt(input: &InputBox, area: Rect, buf: &mut Buffer) {
 }
 
 #[allow(clippy::cast_possible_truncation)]
-fn render_content_scrolled(text: &str, scroll_offset: usize, area: Rect, buf: &mut Buffer) {
+fn render_content_scrolled(
+    text: &str,
+    scroll_offset: usize,
+    styles: &OutputStyles,
+    area: Rect,
+    buf: &mut Buffer,
+) {
     if area.height == 0 || text.is_empty() {
         return;
     }
@@ -768,14 +802,15 @@ fn render_content_scrolled(text: &str, scroll_offset: usize, area: Rect, buf: &m
     let end = lines.len().saturating_sub(scroll_offset);
     let start = end.saturating_sub(visible);
 
-    for (i, line) in lines
+    for (i, line_text) in lines
         .iter()
         .skip(start)
         .take(visible.min(end - start))
         .enumerate()
     {
         let y = area.y + i as u16;
-        let line_widget = Line::from(*line);
+        let style = classify_content_style(line_text, styles);
+        let line_widget = Line::from(Span::styled(*line_text, style));
         let line_area = Rect {
             x: area.x,
             y,
@@ -783,6 +818,26 @@ fn render_content_scrolled(text: &str, scroll_offset: usize, area: Rect, buf: &m
             height: 1,
         };
         Widget::render(line_widget, line_area, buf);
+    }
+}
+
+/// Choose a style for a content line based on its prefix/content.
+fn classify_content_style(line: &str, styles: &OutputStyles) -> Style {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("[tool error]") || trimmed.starts_with("[Error:") {
+        styles.style_for(ContentType::Error)
+    } else if trimmed.starts_with("[warn]") {
+        styles.style_for(ContentType::Warning)
+    } else if trimmed.starts_with("[tool]")
+        || trimmed.starts_with('[') && trimmed.contains("result]")
+    {
+        styles.style_for(ContentType::ToolResult)
+    } else if trimmed.starts_with("[session]") || trimmed.starts_with("[compact]") {
+        styles.style_for(ContentType::SystemMessage)
+    } else if trimmed.starts_with("[tokens:") {
+        styles.style_for(ContentType::Muted)
+    } else {
+        styles.style_for(ContentType::AssistantResponse)
     }
 }
 

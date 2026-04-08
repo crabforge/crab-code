@@ -13,6 +13,7 @@ pub mod rollback;
 pub mod slash_commands;
 pub mod stop_hooks;
 pub mod summarizer;
+pub mod swarm;
 pub mod system_prompt;
 pub mod task;
 pub mod team;
@@ -38,6 +39,10 @@ pub use slash_commands::{
 pub use stop_hooks::{StopConditions, StopReason};
 pub use summarizer::{
     ConversationSummary, SummarizerConfig, SummaryItem, SummaryItemKind, summarize_conversation,
+};
+pub use swarm::{
+    InProcessBackend, PaneInfo, PaneManager, PermissionDecisionEvent, PermissionSyncManager,
+    SwarmBackend, Teammate, TeammateConfig, TeammateState, TmuxBackend, generate_init_script,
 };
 pub use system_prompt::{build_system_prompt, build_system_prompt_with_memories};
 pub use task::{SharedTaskList, Task, TaskList, TaskStatus, shared_task_list};

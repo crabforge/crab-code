@@ -566,6 +566,7 @@ dependencies = [
  "crab-config",
  "crab-core",
  "crab-plugin",
+ "crab-process",
  "crab-session",
  "crab-tools",
  "futures",

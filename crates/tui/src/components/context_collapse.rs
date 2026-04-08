@@ -97,10 +97,21 @@ impl ContextCollapse {
         self.focused
     }
 
+    /// Add a new section at the end.
+    pub fn push_section(&mut self, section: CollapsibleSection) {
+        self.sections.push(section);
+    }
+
     /// The number of sections.
     #[must_use]
     pub fn section_count(&self) -> usize {
         self.sections.len()
+    }
+
+    /// Get a reference to the sections.
+    #[must_use]
+    pub fn sections(&self) -> &[CollapsibleSection] {
+        &self.sections
     }
 }
 
