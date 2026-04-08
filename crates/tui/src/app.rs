@@ -477,7 +477,7 @@ impl App {
                     if !self.input.is_empty() {
                         let text = self.input.submit();
                         self.state = AppState::Processing;
-                        self.spinner.start("Thinking...");
+                        self.spinner.start_with_random_verb();
                         return AppAction::Submit(text);
                     }
                     return AppAction::None;
@@ -536,7 +536,7 @@ impl App {
                 self.permission_dialog = None;
                 self.state = AppState::Processing;
                 if allowed {
-                    self.spinner.start("Executing tool...");
+                    self.spinner.start_with_random_verb();
                 }
                 return AppAction::PermissionResponse {
                     request_id,
@@ -568,31 +568,18 @@ impl App {
                 self.spinner.stop();
                 self.current_tool = None;
                 self.state = AppState::Idle;
-                // Accumulate token usage
+                // Accumulate token usage (displayed in status bar, not inline)
                 self.total_input_tokens += usage.input_tokens;
                 self.total_output_tokens += usage.output_tokens;
-                // Show token usage summary
-                let total = usage.input_tokens + usage.output_tokens;
-                if total > 0 {
-                    let _ = write!(
-                        self.content_buffer,
-                        "\n[tokens: {}in/{}out",
-                        usage.input_tokens, usage.output_tokens
-                    );
-                    if usage.cache_read_tokens > 0 {
-                        let _ = write!(self.content_buffer, " cache:{}r", usage.cache_read_tokens);
-                    }
-                    let _ = writeln!(self.content_buffer, "]");
-                }
             }
             Event::ToolUseStart { name, .. } => {
                 self.current_tool = Some(name.clone());
-                self.spinner.set_message(format!("Running {name}..."));
+                self.spinner.set_message(format!("Running {name}…"));
                 let _ = write!(self.content_buffer, "\n[tool] {name}\n");
             }
             Event::ToolResult { output, .. } => {
                 let tool_name = self.current_tool.take().unwrap_or_default();
-                self.spinner.set_message("Thinking...".to_string());
+                self.spinner.clear_override();
                 // Show tool result summary in content area
                 let text = output.text();
                 if output.is_error {
@@ -804,26 +791,19 @@ fn render_header(model_name: &str, working_dir: &str, area: Rect, buf: &mut Buff
     let fg = Style::default().fg(CRAB_COLOR);
     let fg_bg = Style::default().fg(CRAB_COLOR).bg(CRAB_BG);
 
-    // Crab art — 3 rows: claws + eyes on top, shell in middle, legs below
+    // Crab art — 3 rows, ASCII-safe characters for consistent width
     // All elements use CRAB_COLOR (#DA7756) matching the project logo
     let art_lines: [Line<'_>; 3] = [
-        // Row 1: claws and eyes
+        Line::from(Span::styled(r" /| o o |\  ", fg)),
         Line::from(vec![
-            Span::styled(" ╱▔╲", fg),
-            Span::styled(" ● ● ", fg),
-            Span::styled("╱▔╲ ", fg),
+            Span::styled(r" \_", fg),
+            Span::styled("^^^^^", fg_bg),
+            Span::styled(r"_/  ", fg),
         ]),
-        // Row 2: claws wrapping the shell
-        Line::from(vec![
-            Span::styled(" ╲▂╱", fg),
-            Span::styled("╲███╱", fg_bg),
-            Span::styled("╲▂╱ ", fg),
-        ]),
-        // Row 3: legs
-        Line::from(Span::styled("   ╱╱ ███ ╲╲  ", fg)),
+        Line::from(Span::styled(r"  // ||| \\  ", fg)),
     ];
 
-    let art_width = 15u16;
+    let art_width = 13u16;
 
     // Info text beside the art (mirrors CC's CondensedLogo text)
     let text_budget = area.width.saturating_sub(art_width) as usize;
