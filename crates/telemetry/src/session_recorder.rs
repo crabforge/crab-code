@@ -5,7 +5,19 @@
 //! is sent to any remote endpoint. The recording can be used for
 //! debugging, auditing, and session replay.
 
+use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Get current timestamp as milliseconds since epoch.
+fn now_epoch_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64
+}
 
 // ── Recorder ──────────────────────────────────────────────────────────
 
@@ -56,8 +68,15 @@ impl SessionRecorder {
     /// # Errors
     ///
     /// Returns `Err` if the file cannot be opened or written.
-    pub fn record_message(&mut self, _role: &str, _content: &str) -> std::io::Result<()> {
-        todo!("record_message: append JSONL line with role and content to transcript")
+    pub fn record_message(&mut self, role: &str, content: &str) -> std::io::Result<()> {
+        let ts = now_epoch_ms();
+        let record = serde_json::json!({
+            "type": "message",
+            "role": role,
+            "content": content,
+            "ts": ts,
+        });
+        self.append_line(&record)
     }
 
     /// Record a tool use event (invocation + result).
@@ -73,11 +92,19 @@ impl SessionRecorder {
     /// Returns `Err` if the file cannot be opened or written.
     pub fn record_tool_use(
         &mut self,
-        _tool: &str,
-        _input: &str,
-        _output: &str,
+        tool: &str,
+        input: &str,
+        output: &str,
     ) -> std::io::Result<()> {
-        todo!("record_tool_use: append tool event JSONL line to transcript")
+        let ts = now_epoch_ms();
+        let record = serde_json::json!({
+            "type": "tool_use",
+            "tool": tool,
+            "input": input,
+            "output": output,
+            "ts": ts,
+        });
+        self.append_line(&record)
     }
 
     /// Finalize the recording and return the path to the transcript file.
@@ -88,7 +115,23 @@ impl SessionRecorder {
     ///
     /// Returns `Err` if the final flush fails.
     pub fn finish(&mut self) -> std::io::Result<PathBuf> {
-        todo!("finish: flush buffers and return output_path")
+        // Each write already flushes, so just return the path.
+        Ok(self.output_path.clone())
+    }
+
+    /// Append a single JSONL line to the transcript file.
+    fn append_line(&self, value: &serde_json::Value) -> std::io::Result<()> {
+        if let Some(parent) = self.output_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.output_path)?;
+        let json = serde_json::to_string(value)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        writeln!(file, "{json}")?;
+        Ok(())
     }
 
     /// The path where the transcript will be (or has been) written.

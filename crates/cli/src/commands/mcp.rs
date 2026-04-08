@@ -93,19 +93,20 @@ pub async fn run(args: &McpArgs) -> anyhow::Result<()> {
 }
 
 /// Start the MCP server with the given configuration.
-pub async fn run_mcp_server(config: McpServerConfig) -> anyhow::Result<()> {
-    let _ = config;
-    todo!("run_mcp_server — initialize tool registry and start MCP transport")
+pub async fn run_mcp_server(_config: McpServerConfig) -> anyhow::Result<()> {
+    anyhow::bail!("MCP server mode not yet implemented")
 }
 
 /// List all tools that would be exposed via MCP.
 async fn list_mcp_tools() -> anyhow::Result<()> {
-    todo!("list_mcp_tools — enumerate available tools with names and descriptions")
+    println!("No MCP tools registered yet.");
+    Ok(())
 }
 
 /// Show MCP server status and diagnostics.
 async fn show_mcp_status() -> anyhow::Result<()> {
-    todo!("show_mcp_status — report running server info, connected clients")
+    println!("No MCP servers running.");
+    Ok(())
 }
 
 #[cfg(test)]

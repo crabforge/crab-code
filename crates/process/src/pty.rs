@@ -21,21 +21,21 @@ pub struct PtyOptions {
 impl PtyProcess {
     /// Spawn a command in a new pseudo-terminal.
     pub fn spawn(_opts: PtyOptions) -> crab_common::Result<Self> {
-        todo!()
+        Err(crab_common::Error::Config("PTY not yet implemented".into()))
     }
 
     /// Write data to the PTY stdin.
     pub fn write(&mut self, _data: &[u8]) -> crab_common::Result<()> {
-        todo!()
+        Err(crab_common::Error::Config("PTY not yet implemented".into()))
     }
 
     /// Resize the PTY.
     pub fn resize(&self, _rows: u16, _cols: u16) -> crab_common::Result<()> {
-        todo!()
+        Err(crab_common::Error::Config("PTY not yet implemented".into()))
     }
 
     /// Kill the PTY process.
     pub fn kill(&mut self) -> crab_common::Result<()> {
-        todo!()
+        Err(crab_common::Error::Config("PTY not yet implemented".into()))
     }
 }

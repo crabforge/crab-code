@@ -41,7 +41,8 @@ impl FastModeState {
     ///
     /// Returns the new `enabled` state.
     pub fn toggle(&mut self) -> bool {
-        todo!()
+        self.enabled = !self.enabled;
+        self.enabled
     }
 
     /// Whether fast mode is currently enabled.
@@ -55,7 +56,11 @@ impl FastModeState {
     /// - If fast mode is off and an original model was stored, returns it.
     /// - Otherwise returns `None` (caller should use the default from settings).
     pub fn current_model(&self) -> Option<&str> {
-        todo!()
+        if self.enabled {
+            self.fast_model.as_deref()
+        } else {
+            self.original_model.as_deref()
+        }
     }
 
     /// Set the fast model identifier.
