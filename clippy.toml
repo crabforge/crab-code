@@ -1,2 +1,9 @@
 # Clippy configuration
 # Additional rules beyond workspace.lints are configured here
+
+# Allow expect()/unwrap() in test code (following codex-rs convention)
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+
+# Accommodate richer error variants (default is 128 bytes)
+large-error-threshold = 256

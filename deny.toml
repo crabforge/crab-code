@@ -37,6 +37,11 @@ ignore = true
 [bans]
 multiple-versions = "warn"
 wildcards = "warn"
+highlight = "all"
+# Prevent accidental OpenSSL dependency — use rustls for TLS
+deny = [
+    { crate = "openssl-sys", wrappers = [] },
+]
 
 [sources]
 unknown-registry = "deny"
