@@ -1,13 +1,19 @@
+pub mod auth;
 pub mod cancellation;
 pub mod capability;
+pub mod channel_permissions;
 pub mod client;
 pub mod discovery;
+pub mod elicitation;
+pub mod env_expansion;
 pub mod handshake;
 pub mod health;
 pub mod logging;
 pub mod manager;
 pub mod negotiation;
+pub mod normalization;
 pub mod notification;
+pub mod official_registry;
 pub mod progress;
 pub mod protocol;
 pub mod resource;
@@ -56,3 +62,8 @@ pub use server::{
 };
 pub use sse_server::run_sse;
 pub use transport::Transport;
+
+pub use auth::{McpAuthManager, McpAuthMethod};
+pub use channel_permissions::ChannelPermissions;
+pub use elicitation::{ElicitationRequest, ElicitationResponse};
+pub use env_expansion::{expand_env_in_args, expand_env_vars};
