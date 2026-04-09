@@ -746,19 +746,9 @@ impl App {
             buf,
         );
 
-        // Status line: spinner (when active) or status bar (model/tokens/cost)
+        // Status line: only show spinner when active (CC leaves this blank when idle)
         if self.spinner.is_active() {
             Widget::render(&self.spinner, layout.status, buf);
-        } else {
-            render_status_line(
-                &self.model_name,
-                self.permission_mode,
-                self.total_input_tokens,
-                self.total_output_tokens,
-                &self.thinking,
-                layout.status,
-                buf,
-            );
         }
 
         // Separator above input
@@ -1250,6 +1240,7 @@ fn classify_tool_risk(tool_name: &str) -> RiskLevel {
 /// Render the status line: model name | token counts | thinking state.
 ///
 /// Matches CC's `StatusLine` component showing operational data.
+#[allow(dead_code)]
 fn render_status_line(
     model: &str,
     perm_mode: crab_core::permission::PermissionMode,
@@ -1307,6 +1298,7 @@ fn render_status_line(
 }
 
 /// Format token count: 1234 → "1.2k", 500 → "500"
+#[allow(dead_code)]
 fn format_token_count(tokens: u64) -> String {
     if tokens >= 1_000_000 {
         format!("{:.1}M", tokens as f64 / 1_000_000.0)
