@@ -525,7 +525,7 @@ mod tests {
         };
         let se = sse_event_to_stream_event(event).unwrap();
         assert!(
-            matches!(se, StreamEvent::ContentBlockStart { index: 0, content_type } if content_type == "text")
+            matches!(se, StreamEvent::ContentBlockStart { index: 0, content_type, .. } if content_type == "text")
         );
     }
 
