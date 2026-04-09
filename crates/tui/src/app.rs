@@ -362,13 +362,9 @@ impl App {
                     self.scroll_to_search_match();
                     return AppAction::None;
                 }
-                Action::CycleMode if self.state != AppState::Confirming => {
-                    self.cycle_input_mode();
-                    return AppAction::None;
-                }
-                Action::Redraw => {
-                    // Force redraw is handled by the outer loop re-rendering;
-                    // returning None triggers a repaint on the next frame.
+                // CycleMode: CC cycles permission modes. Needs agent integration.
+                // Redraw: handled by outer loop on next frame.
+                Action::CycleMode | Action::Redraw => {
                     return AppAction::None;
                 }
                 // These actions are recognized but currently act as no-ops
@@ -993,23 +989,24 @@ fn render_unseen_divider(count: usize, area: Rect, buf: &mut Buffer) {
 
 /// Render input with `❯` prompt and mode indicator — no border box (matches CC's flat style).
 #[allow(clippy::cast_possible_truncation)]
-fn render_input_with_prompt(input: &InputBox, mode: PromptInputMode, area: Rect, buf: &mut Buffer) {
+fn render_input_with_prompt(
+    input: &InputBox,
+    _mode: PromptInputMode,
+    area: Rect,
+    buf: &mut Buffer,
+) {
     if area.height == 0 || area.width < 4 {
         Widget::render(input, area, buf);
         return;
     }
 
-    // Mode indicator label: shown only for non-default modes
-    let mode_prefix = match mode {
-        PromptInputMode::Prompt => String::new(),
-        other => format!("[{}] ", other.label()),
-    };
-    let prefix_width = mode_prefix.len() as u16;
+    // No mode indicator — CC shows permission mode elsewhere (status line)
+    let prefix_width = 0u16;
 
-    // Mode indicator
-    if !mode_prefix.is_empty() {
+    // Placeholder for future mode indicator
+    if false {
         let mode_span = Span::styled(
-            &mode_prefix,
+            "",
             Style::default()
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
@@ -2203,7 +2200,8 @@ mod tests {
     }
 
     #[test]
-    fn render_input_with_bash_mode() {
+    fn render_input_no_mode_prefix() {
+        // Mode indicator was removed — all modes render the same ❯ prompt
         let input = InputBox::new();
         let area = Rect::new(0, 0, 40, 1);
         let mut buf = Buffer::empty(area);
@@ -2212,7 +2210,8 @@ mod tests {
         let text: String = (0..area.width)
             .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
             .collect();
-        assert!(text.contains("[bash]"));
+        assert!(!text.contains("[bash]"));
+        assert!(text.contains('❯'));
     }
 
     #[test]
