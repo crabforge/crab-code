@@ -1,5 +1,6 @@
 pub mod coordinator;
 pub mod effort;
+pub mod engine;
 pub mod error_recovery;
 pub mod git_context;
 pub mod message_bus;
@@ -23,6 +24,7 @@ pub mod worker;
 
 pub use coordinator::{AgentCoordinator, AgentHandle, AgentSession, SessionConfig};
 pub use effort::{EffortLevel, ThinkingMode};
+pub use engine::{QueryEngine, QueryEngineConfig, QuerySource};
 pub use error_recovery::{
     CircuitBreaker, CircuitBreakerConfig, CircuitState, DegradableFeature, ErrorCategory,
     ErrorClassifier, FeaturePriority, GracefulDegradation, RecoveryAction, RecoveryStrategy,
