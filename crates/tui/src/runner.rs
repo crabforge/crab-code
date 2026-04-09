@@ -8,6 +8,8 @@
 //! - Skill `/command` input detection and resolution via `SkillRegistry`
 
 use std::io;
+
+use crate::components::autocomplete::CommandInfo;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -161,7 +163,84 @@ pub async fn run(config: TuiConfig) -> anyhow::Result<()> {
     let mut app = App::new(&model_name);
     if let Ok(cwd) = std::env::current_dir() {
         app.set_working_dir(cwd.display().to_string());
+        app.set_completion_cwd(cwd);
     }
+
+    // Register built-in slash commands for Tab completion
+    app.set_slash_commands(vec![
+        CommandInfo {
+            name: "/help".into(),
+            description: "Show available commands".into(),
+        },
+        CommandInfo {
+            name: "/clear".into(),
+            description: "Clear conversation history".into(),
+        },
+        CommandInfo {
+            name: "/compact".into(),
+            description: "Compact conversation (free context)".into(),
+        },
+        CommandInfo {
+            name: "/exit".into(),
+            description: "Exit crab-code".into(),
+        },
+        CommandInfo {
+            name: "/model".into(),
+            description: "Show or switch the current model".into(),
+        },
+        CommandInfo {
+            name: "/cost".into(),
+            description: "Show token usage and cost".into(),
+        },
+        CommandInfo {
+            name: "/status".into(),
+            description: "Show session status".into(),
+        },
+        CommandInfo {
+            name: "/memory".into(),
+            description: "Show or manage memory files".into(),
+        },
+        CommandInfo {
+            name: "/config".into(),
+            description: "Open settings configuration".into(),
+        },
+        CommandInfo {
+            name: "/permissions".into(),
+            description: "Show current permission mode".into(),
+        },
+        CommandInfo {
+            name: "/resume".into(),
+            description: "Resume a previous session".into(),
+        },
+        CommandInfo {
+            name: "/diff".into(),
+            description: "Show recent file changes".into(),
+        },
+        CommandInfo {
+            name: "/review".into(),
+            description: "Review recent code changes".into(),
+        },
+        CommandInfo {
+            name: "/commit".into(),
+            description: "Create a git commit".into(),
+        },
+        CommandInfo {
+            name: "/plan".into(),
+            description: "Enter plan mode".into(),
+        },
+        CommandInfo {
+            name: "/fast".into(),
+            description: "Toggle fast mode".into(),
+        },
+        CommandInfo {
+            name: "/thinking".into(),
+            description: "Toggle extended thinking".into(),
+        },
+        CommandInfo {
+            name: "/effort".into(),
+            description: "Set effort level".into(),
+        },
+    ]);
 
     // Main render + event loop
     let result = run_loop(
