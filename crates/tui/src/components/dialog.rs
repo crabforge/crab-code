@@ -65,9 +65,9 @@ impl PermissionDialog {
             request_id: request_id.into(),
             selected: 0,
             options: vec![
-                ("Yes", PermissionResponse::Allow),
-                ("No", PermissionResponse::Deny),
-                ("Always allow", PermissionResponse::AlwaysAllow),
+                ("Allow", PermissionResponse::Allow),
+                ("Deny", PermissionResponse::Deny),
+                ("Always Allow", PermissionResponse::AlwaysAllow),
             ],
         }
     }

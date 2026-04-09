@@ -161,6 +161,8 @@ pub struct App {
     unseen_message_count: usize,
     /// Current prompt input mode.
     pub input_mode: PromptInputMode,
+    /// Timestamp of last Ctrl+C press for double-press detection.
+    last_interrupt: Option<Instant>,
 }
 
 impl App {
@@ -171,7 +173,8 @@ impl App {
             state: AppState::Idle,
             input: InputBox::new(),
             spinner: Spinner::new(),
-            content_buffer: String::new(),
+            content_buffer: "Welcome! Type a message to start, or /help for commands.\n\n"
+                .to_string(),
             model_name: model_name.into(),
             permission_dialog: None,
             should_quit: false,
@@ -195,6 +198,7 @@ impl App {
             scroll_anchor: None,
             unseen_message_count: 0,
             input_mode: PromptInputMode::Prompt,
+            last_interrupt: None,
         }
     }
 
@@ -286,8 +290,24 @@ impl App {
         if let Some(action) = self.keybindings.resolve(key.code, key.modifiers) {
             match action {
                 Action::Quit => {
-                    self.should_quit = true;
-                    return AppAction::Quit;
+                    // CC-aligned double-press: first Ctrl+C interrupts, second exits.
+                    let now = Instant::now();
+                    if let Some(last) = self.last_interrupt
+                        && now.duration_since(last) < Duration::from_millis(500)
+                    {
+                        // Double press within 500ms → actually quit
+                        self.should_quit = true;
+                        return AppAction::Quit;
+                    }
+                    // First press → interrupt current operation
+                    self.last_interrupt = Some(now);
+                    if self.state == AppState::Processing {
+                        self.spinner.stop();
+                        self.state = AppState::Idle;
+                        let _ = writeln!(self.content_buffer, "\n[interrupted]");
+                    }
+                    // Show hint that double-press exits
+                    return AppAction::None;
                 }
                 Action::NewSession if self.state != AppState::Confirming => {
                     return AppAction::NewSession;
@@ -476,6 +496,9 @@ impl App {
                 if key.code == KeyCode::Enter && !key.modifiers.contains(KeyModifiers::SHIFT) {
                     if !self.input.is_empty() {
                         let text = self.input.submit();
+                        // Turn separator: show user prompt then divider
+                        let _ = writeln!(self.content_buffer, "❯ {text}");
+                        let _ = writeln!(self.content_buffer, "────────────────────────────────");
                         self.state = AppState::Processing;
                         self.spinner.start_with_random_verb();
                         return AppAction::Submit(text);
@@ -563,6 +586,8 @@ impl App {
                     self.content_scroll = 0; // auto-scroll on new content
                 }
                 self.content_buffer.push_str(&delta);
+                // Approximate token count for spinner display (~4 chars per token)
+                self.spinner.response_tokens += (delta.len() as u64).div_ceil(4);
             }
             Event::MessageEnd { usage, .. } => {
                 self.spinner.stop();
@@ -571,6 +596,8 @@ impl App {
                 // Accumulate token usage (displayed in status bar, not inline)
                 self.total_input_tokens += usage.input_tokens;
                 self.total_output_tokens += usage.output_tokens;
+                // Turn separator after assistant response
+                let _ = writeln!(self.content_buffer, "\n");
             }
             Event::ToolUseStart { name, .. } => {
                 self.current_tool = Some(name.clone());
@@ -1193,7 +1220,7 @@ mod tests {
         assert_eq!(app.state, AppState::Idle);
         assert!(app.input.is_empty());
         assert!(!app.spinner.is_active());
-        assert!(app.content_buffer.is_empty());
+        assert!(app.content_buffer.contains("Welcome"));
         assert_eq!(app.model_name, "gpt-4o");
         assert!(!app.should_quit);
         assert!(!app.sidebar_visible);
@@ -1233,8 +1260,20 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_c_quits() {
+    fn ctrl_c_single_interrupts() {
         let mut app = App::new("test");
+        let action = app.handle_event(ctrl_key('c'));
+        // Single Ctrl+C should interrupt, not quit
+        assert_eq!(action, AppAction::None);
+        assert!(!app.should_quit);
+    }
+
+    #[test]
+    fn ctrl_c_double_quits() {
+        let mut app = App::new("test");
+        // First press: interrupt
+        app.handle_event(ctrl_key('c'));
+        // Second press within 500ms: quit
         let action = app.handle_event(ctrl_key('c'));
         assert_eq!(action, AppAction::Quit);
         assert!(app.should_quit);
@@ -1243,6 +1282,8 @@ mod tests {
     #[test]
     fn ctrl_d_quits() {
         let mut app = App::new("test");
+        // Ctrl+D also goes through Quit action (same double-press logic)
+        app.handle_event(ctrl_key('d'));
         let action = app.handle_event(ctrl_key('d'));
         assert_eq!(action, AppAction::Quit);
     }
@@ -1266,7 +1307,7 @@ mod tests {
             index: 0,
             delta: "world".into(),
         }));
-        assert_eq!(app.content_buffer, "Hello world");
+        assert!(app.content_buffer.ends_with("Hello world"));
         assert_eq!(app.content_scroll, 0); // auto-scrolled
     }
 
@@ -1602,7 +1643,10 @@ mod tests {
         let mut app = App::new("test");
         let kb = Keybindings::defaults();
         app.set_keybindings(kb);
-        // Should not panic
+        // Single Ctrl+C should interrupt (not quit with double-press logic)
+        let action = app.handle_event(ctrl_key('c'));
+        assert_eq!(action, AppAction::None);
+        // Double press should quit
         let action = app.handle_event(ctrl_key('c'));
         assert_eq!(action, AppAction::Quit);
     }

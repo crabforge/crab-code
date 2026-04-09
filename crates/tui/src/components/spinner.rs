@@ -255,6 +255,10 @@ pub struct Spinner {
     active: bool,
     /// Shimmer color (the highlight sliding across text).
     shimmer_color: Color,
+    /// When the spinner started (for elapsed time display).
+    started_at: Option<std::time::Instant>,
+    /// Cumulative response tokens during this spinner session.
+    pub response_tokens: u64,
 }
 
 impl Spinner {
@@ -268,6 +272,8 @@ impl Spinner {
             override_message: None,
             active: false,
             shimmer_color: Color::White,
+            started_at: None,
+            response_tokens: 0,
         }
     }
 
@@ -278,6 +284,8 @@ impl Spinner {
         self.active = true;
         self.frame = 0;
         self.tick = 0;
+        self.started_at = Some(std::time::Instant::now());
+        self.response_tokens = 0;
     }
 
     /// Start the spinner with a specific message (overrides verb).
@@ -286,6 +294,8 @@ impl Spinner {
         self.active = true;
         self.frame = 0;
         self.tick = 0;
+        self.started_at = Some(std::time::Instant::now());
+        self.response_tokens = 0;
     }
 
     /// Stop the spinner.
@@ -307,13 +317,36 @@ impl Spinner {
         self.active
     }
 
-    /// Current display message (verb + "…" or override message).
+    /// Current display message (verb + "…" + timing + tokens).
     #[must_use]
     pub fn message(&self) -> String {
-        if let Some(ref msg) = self.override_message {
+        let base = if let Some(ref msg) = self.override_message {
             msg.clone()
         } else {
             format!("{}…", self.verb)
+        };
+
+        // Append elapsed time and token count like CC: "Verb… (12s · 3.2k tokens)"
+        let mut suffix_parts = Vec::new();
+        if let Some(started) = self.started_at {
+            let elapsed = started.elapsed().as_secs();
+            if elapsed >= 1 {
+                suffix_parts.push(format!("{elapsed}s"));
+            }
+        }
+        if self.response_tokens > 0 {
+            let formatted = if self.response_tokens >= 1000 {
+                format!("{:.1}k", self.response_tokens as f64 / 1000.0)
+            } else {
+                self.response_tokens.to_string()
+            };
+            suffix_parts.push(format!("{formatted} tokens"));
+        }
+
+        if suffix_parts.is_empty() {
+            base
+        } else {
+            format!("{base} ({})", suffix_parts.join(" · "))
         }
     }
 
