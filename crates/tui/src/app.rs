@@ -8,19 +8,14 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Widget;
-
-use crab_tools::builtin::bash::BASH_TOOL_NAME;
-use crab_tools::builtin::edit::EDIT_TOOL_NAME;
-use crab_tools::builtin::notebook::NOTEBOOK_EDIT_TOOL_NAME;
-use crab_tools::builtin::write::WRITE_TOOL_NAME;
+use ratatui::widgets::{Paragraph, Widget};
 
 use crate::components::autocomplete::{AutoComplete, CommandInfo};
 use crate::components::code_block::{CodeBlockTracker, ImagePlaceholder};
 use crate::components::context_collapse::{CollapsibleSection, ContextCollapse};
-use crate::components::dialog::{PermissionDialog, PermissionResponse, RiskLevel};
 use crate::components::input::InputBox;
 use crate::components::output_styles::{ContentType, OutputStyles};
+use crate::components::permission::{PermissionCard, PermissionResponse};
 use crate::components::search::{self, SearchState};
 use crate::components::session_sidebar::SessionSidebar;
 use crate::components::spinner::Spinner;
@@ -139,8 +134,8 @@ pub struct App {
     pub content_buffer: String,
     /// Model name (displayed in top bar).
     pub model_name: String,
-    /// Current pending permission dialog, if any.
-    permission_dialog: Option<PermissionDialog>,
+    /// Current pending permission card, if any (CC-style inline card).
+    permission_card: Option<PermissionCard>,
     /// Whether the app should exit.
     pub should_quit: bool,
     /// Name of the tool currently executing (for display).
@@ -205,7 +200,7 @@ impl App {
             spinner: Spinner::new(),
             content_buffer: String::new(),
             model_name: model_name.into(),
-            permission_dialog: None,
+            permission_card: None,
             should_quit: false,
             current_tool: None,
             sidebar_visible: false,
@@ -585,14 +580,14 @@ impl App {
     }
 
     fn handle_confirming_key(&mut self, key: crossterm::event::KeyEvent) -> AppAction {
-        if let Some(ref mut dialog) = self.permission_dialog {
-            if let Some(response) = dialog.handle_key(key.code) {
-                let request_id = dialog.request_id.clone();
+        if let Some(ref mut card) = self.permission_card {
+            if let Some(response) = card.handle_key(key.code) {
+                let request_id = card.request_id.clone();
                 let allowed = matches!(
                     response,
-                    PermissionResponse::Allow | PermissionResponse::AlwaysAllow
+                    PermissionResponse::Allow | PermissionResponse::AllowAlways
                 );
-                self.permission_dialog = None;
+                self.permission_card = None;
                 self.state = AppState::Processing;
                 if allowed {
                     self.spinner.start_with_random_verb();
@@ -680,12 +675,9 @@ impl App {
             } => {
                 self.spinner.stop();
                 self.state = AppState::Confirming;
-                // Determine risk level based on tool name
-                let risk = classify_tool_risk(&tool_name);
-                self.permission_dialog = Some(PermissionDialog::new(
-                    tool_name,
-                    input_summary,
-                    risk,
+                self.permission_card = Some(PermissionCard::from_event(
+                    &tool_name,
+                    &input_summary,
                     request_id,
                 ));
             }
@@ -813,10 +805,32 @@ impl App {
             render_autocomplete_popup(&self.autocomplete, layout.input, buf);
         }
 
-        // Permission dialog overlay (renders on top of everything)
-        if let Some(ref dialog) = self.permission_dialog {
-            let dialog_area = PermissionDialog::dialog_area(area);
-            Widget::render(dialog, dialog_area, buf);
+        // Permission card — rendered inline at bottom of content area
+        // (CC style: top-border-only card in the message flow, not a modal overlay)
+        if let Some(ref card) = self.permission_card {
+            // Calculate height needed: content + options + hints
+            let card_lines = card.render_lines(layout.content.width);
+            let card_height = (card_lines.len() as u16).min(layout.content.height);
+            let card_area = Rect {
+                x: layout.content.x,
+                y: layout.content.y + layout.content.height - card_height,
+                width: layout.content.width,
+                height: card_height,
+            };
+            // Render each line of the card
+            for (i, line) in card_lines.iter().enumerate() {
+                if i >= card_height as usize {
+                    break;
+                }
+                let line_area = Rect {
+                    x: card_area.x,
+                    y: card_area.y + i as u16,
+                    width: card_area.width,
+                    height: 1,
+                };
+                let paragraph = Paragraph::new(line.clone());
+                Widget::render(paragraph, line_area, buf);
+            }
         }
     }
 }
@@ -1097,8 +1111,15 @@ fn render_messages(messages: &[ChatMessage], scroll_offset: usize, area: Rect, b
                 if text.is_empty() {
                     continue;
                 }
+                // Strip trailing tool-call JSON that some models (DeepSeek) output
+                // alongside structured tool_calls. The JSON is redundant since we
+                // handle tool_calls separately.
+                let clean_text = strip_trailing_tool_json(text);
+                if clean_text.is_empty() {
+                    continue;
+                }
                 // ● prefix on first line, then markdown-rendered content
-                let md_lines = md_renderer.render(text);
+                let md_lines = md_renderer.render(&clean_text);
                 if let Some(first) = md_lines.first() {
                     let mut spans = vec![Span::styled("● ", Style::default().fg(CRAB_COLOR))];
                     spans.extend(first.spans.iter().cloned());
@@ -1235,6 +1256,25 @@ fn render_content_scrolled(
 }
 
 /// Check if a line is a system/tool prefix line (not markdown).
+/// Strip trailing JSON tool-call arguments from assistant text.
+///
+/// Some models (`DeepSeek`) output tool parameters as text alongside the
+/// structured `tool_calls` response. We strip the trailing `{...}` block
+/// since the tool call is handled separately via `ChatMessage::ToolUse`.
+fn strip_trailing_tool_json(text: &str) -> String {
+    let trimmed = text.trim_end();
+    if let Some(brace_start) = trimmed.rfind('{')
+        && trimmed.ends_with('}')
+    {
+        // Verify the JSON-like block is at the end and preceded by text
+        let before = trimmed[..brace_start].trim_end();
+        if !before.is_empty() {
+            return before.to_string();
+        }
+    }
+    text.to_string()
+}
+
 fn is_system_line(line: &str) -> bool {
     let t = line.trim_start();
     t.starts_with("[tool")
@@ -1340,15 +1380,6 @@ fn render_autocomplete_popup(ac: &AutoComplete, input_area: Rect, buf: &mut Buff
             height: 1,
         };
         Widget::render(line, line_area, buf);
-    }
-}
-
-/// Classify tool risk level based on tool name for the permission dialog.
-fn classify_tool_risk(tool_name: &str) -> RiskLevel {
-    match tool_name {
-        BASH_TOOL_NAME | WRITE_TOOL_NAME | NOTEBOOK_EDIT_TOOL_NAME => RiskLevel::High,
-        EDIT_TOOL_NAME => RiskLevel::Medium,
-        _ => RiskLevel::Low,
     }
 }
 
@@ -1675,11 +1706,10 @@ mod tests {
     fn confirming_y_allows() {
         let mut app = App::new("test");
         app.state = AppState::Confirming;
-        app.permission_dialog = Some(PermissionDialog::new(
+        app.permission_card = Some(PermissionCard::from_event(
             "bash",
             "rm -rf /tmp",
-            RiskLevel::High,
-            "req_1",
+            "req_1".into(),
         ));
 
         let action = app.handle_event(key(KeyCode::Char('y')));
@@ -1691,18 +1721,17 @@ mod tests {
             }
         );
         assert_eq!(app.state, AppState::Processing);
-        assert!(app.permission_dialog.is_none());
+        assert!(app.permission_card.is_none());
     }
 
     #[test]
     fn confirming_n_denies() {
         let mut app = App::new("test");
         app.state = AppState::Confirming;
-        app.permission_dialog = Some(PermissionDialog::new(
+        app.permission_card = Some(PermissionCard::from_event(
             "bash",
             "rm -rf /tmp",
-            RiskLevel::High,
-            "req_1",
+            "req_1".into(),
         ));
 
         let action = app.handle_event(key(KeyCode::Char('n')));
@@ -1719,11 +1748,10 @@ mod tests {
     fn confirming_esc_denies() {
         let mut app = App::new("test");
         app.state = AppState::Confirming;
-        app.permission_dialog = Some(PermissionDialog::new(
+        app.permission_card = Some(PermissionCard::from_event(
             "edit",
             "src/main.rs",
-            RiskLevel::Medium,
-            "req_2",
+            "req_2".into(),
         ));
 
         let action = app.handle_event(key(KeyCode::Esc));
@@ -1830,14 +1858,13 @@ mod tests {
     }
 
     #[test]
-    fn permission_dialog_renders_in_frame() {
+    fn permission_card_renders_in_frame() {
         let mut app = App::new("test");
         app.state = AppState::Confirming;
-        app.permission_dialog = Some(PermissionDialog::new(
+        app.permission_card = Some(PermissionCard::from_event(
             "bash",
             "rm -rf /tmp",
-            RiskLevel::High,
-            "req_1",
+            "req_1".into(),
         ));
 
         let area = Rect::new(0, 0, 80, 24);
@@ -1850,23 +1877,27 @@ mod tests {
                 (0..area.width).map(move |x| buf_ref.cell((x, y)).unwrap().symbol().to_string())
             })
             .collect();
-        assert!(all_text.contains("bash"));
-        assert!(all_text.contains("Permission"));
+        // Card renders inline at bottom of content; verify it renders
+        assert!(!all_text.trim().is_empty());
+        // Should contain the card title
+        assert!(all_text.contains("Bash command"));
     }
 
     #[test]
-    fn classify_tool_risk_levels() {
-        assert_eq!(classify_tool_risk(BASH_TOOL_NAME), RiskLevel::High);
-        assert_eq!(classify_tool_risk(WRITE_TOOL_NAME), RiskLevel::High);
-        assert_eq!(classify_tool_risk(EDIT_TOOL_NAME), RiskLevel::Medium);
-        assert_eq!(
-            classify_tool_risk(crab_tools::builtin::read::READ_TOOL_NAME),
-            RiskLevel::Low
-        );
-        assert_eq!(
-            classify_tool_risk(crab_tools::builtin::glob::GLOB_TOOL_NAME),
-            RiskLevel::Low
-        );
+    fn permission_kind_classification() {
+        use crate::components::permission::PermissionKind;
+
+        let card = PermissionCard::from_event("bash", "ls -la", "r1".into());
+        assert!(matches!(card.kind, PermissionKind::Bash { .. }));
+
+        let card = PermissionCard::from_event("edit", "file.rs", "r2".into());
+        assert!(matches!(card.kind, PermissionKind::FileEdit { .. }));
+
+        let card = PermissionCard::from_event("write", "out.txt", "r3".into());
+        assert!(matches!(card.kind, PermissionKind::FileWrite { .. }));
+
+        let card = PermissionCard::from_event("custom_tool", "data", "r4".into());
+        assert!(matches!(card.kind, PermissionKind::Generic { .. }));
     }
 
     #[test]
