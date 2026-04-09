@@ -165,6 +165,8 @@ pub struct App {
     last_interrupt: Option<Instant>,
     /// Current permission mode (cycled via Shift+Tab).
     pub permission_mode: crab_core::permission::PermissionMode,
+    /// Whether the ● response marker has been added for the current turn.
+    response_started: bool,
 }
 
 impl App {
@@ -201,6 +203,7 @@ impl App {
             input_mode: PromptInputMode::Prompt,
             last_interrupt: None,
             permission_mode: crab_core::permission::PermissionMode::Default,
+            response_started: false,
         }
     }
 
@@ -507,6 +510,7 @@ impl App {
                         // Show user prompt in content area (no divider — CC doesn't have one)
                         let _ = writeln!(self.content_buffer, "\n❯ {text}\n");
                         self.state = AppState::Processing;
+                        self.response_started = false;
                         self.spinner.start_with_random_verb();
                         return AppAction::Submit(text);
                     }
@@ -583,9 +587,13 @@ impl App {
         use crab_core::event::Event;
         match event {
             Event::ContentDelta { delta, .. } => {
-                // Add ● marker at the start of assistant response (CC style)
-                if self.state == AppState::Processing && !self.content_buffer.ends_with("● ") {
+                // Add ● marker once at the start of a new assistant response.
+                // The marker is added when transitioning from "just submitted" to
+                // "first content arriving". We detect this by checking if the last
+                // non-whitespace content ends with the user prompt echo line.
+                if !self.response_started {
                     self.content_buffer.push_str("● ");
+                    self.response_started = true;
                 }
                 // Track unseen content when the user is scrolled up
                 if self.scroll_anchor.is_some() {
